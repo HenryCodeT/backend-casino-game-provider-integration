@@ -1,0 +1,43 @@
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# TypeScript
+dist
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE
+.vscode
+.idea
+
+# Tests
+coverage
+*.test.ts
+__tests__
+
+# Documentation
+README.md
+ARCHITECTURE.md
+DEPLOYMENT.md
+API_EXAMPLES.md
+
+# Misc
+.DS_Store
+*.log
+tmp
+temp
