@@ -58,7 +58,7 @@ export async function launchSession(input: LaunchInput) {
   if (!casinoUser) {
     casinoUser = await prisma.providerCasinoUser.create({
       data: {
-        casinoId: casino.id,
+        providerCasinoId: casino.id,
         casinoUserId: Number(input.userId),
         playerKey,
       },
@@ -122,10 +122,10 @@ export async function simulateRound(input: SimulateInput) {
     data: {
       roundId,
       sessionId: input.providerSessionId,
-      casinoId: casino.id,
+      providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       providerCasinoUserId: casinoUser.id,
-      gameId: game.id,
+      providerGameId: game.id,
       currency: input.currency || "USD",
       status: "open",
     },
@@ -157,8 +157,8 @@ export async function simulateRound(input: SimulateInput) {
   await prisma.providerBet.create({
     data: {
       transactionId: bet1TxId,
-      roundId: round.id,
-      casinoId: casino.id,
+      providerGameRoundId: round.id,
+      providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "debit",
       amount: BigInt(bet1Amount),
@@ -188,8 +188,8 @@ export async function simulateRound(input: SimulateInput) {
   await prisma.providerBet.create({
     data: {
       transactionId: bet2TxId,
-      roundId: round.id,
-      casinoId: casino.id,
+      providerGameRoundId: round.id,
+      providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "debit",
       amount: BigInt(bet2Amount),
@@ -214,8 +214,8 @@ export async function simulateRound(input: SimulateInput) {
   await prisma.providerBet.create({
     data: {
       transactionId: rollbackTxId,
-      roundId: round.id,
-      casinoId: casino.id,
+      providerGameRoundId: round.id,
+      providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "rollback",
       amount: BigInt(bet2Amount),
@@ -242,8 +242,8 @@ export async function simulateRound(input: SimulateInput) {
   await prisma.providerBet.create({
     data: {
       transactionId: payoutTxId,
-      roundId: round.id,
-      casinoId: casino.id,
+      providerGameRoundId: round.id,
+      providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "credit",
       amount: BigInt(payoutAmount),

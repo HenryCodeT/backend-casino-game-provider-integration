@@ -13,20 +13,20 @@ interface LaunchGameInput {
 export async function launchGame(input: LaunchGameInput) {
   const user = await prisma.casinoUser.findUnique({
     where: { id: input.userId },
-    include: { wallet: true },
+    include: { casinoWallets: true },
   });
   if (!user) throw { status: 404, error: "User not found" };
 
-  const wallet = user.wallet;
+  const wallet = user.casinoWallets[0];
   if (!wallet) throw { status: 404, error: "Wallet not found" };
 
   const game = await prisma.casinoGame.findUnique({
     where: { id: input.gameId },
-    include: { provider: true },
+    include: { casinoGameProvider: true },
   });
   if (!game || !game.isActive)
     throw { status: 404, error: "Game not found or inactive" };
-  if (game.provider.isDisabled)
+  if (game.casinoGameProvider.isDisabled)
     throw { status: 400, error: "Provider is disabled" };
 
   const sessionToken = randomUUID();
@@ -34,9 +34,9 @@ export async function launchGame(input: LaunchGameInput) {
   const session = await prisma.casinoGameSession.create({
     data: {
       token: sessionToken,
-      userId: user.id,
-      walletId: wallet.id,
-      gameId: game.id,
+      casinoUserId: user.id,
+      casinoWalletId: wallet.id,
+      casinoGameId: game.id,
       isActive: true,
     },
   });
@@ -49,10 +49,10 @@ export async function launchGame(input: LaunchGameInput) {
     userId: user.id,
     gameId: game.providerGameId,
     currency: input.currency || wallet.currencyCode,
-    casinoCode: game.provider.code,
+    casinoCode: game.casinoGameProvider.code,
   };
 
-  const providerUrl = `${game.provider.apiEndpoint}/provider/launch`;
+  const providerUrl = `${game.casinoGameProvider.apiEndpoint}/provider/launch`;
   const signature = signBody(launchPayload, providerSecret);
 
   const providerRes = await fetch(providerUrl, {
@@ -99,17 +99,17 @@ interface GetBalanceInput {
 export async function getBalance(input: GetBalanceInput) {
   const session = await prisma.casinoGameSession.findUnique({
     where: { token: input.sessionToken },
-    include: { wallet: true },
+    include: { casinoWallet: true },
   });
 
-  if (!session || session.userId !== input.userId) {
+  if (!session || session.casinoUserId !== input.userId) {
     throw { status: 404, error: "Session not found" };
   }
 
   return {
     userId: input.userId,
-    balance: session.wallet.playableBalance.toString(),
-    currency: session.wallet.currencyCode,
+    balance: session.casinoWallet.playableBalance.toString(),
+    currency: session.casinoWallet.currencyCode,
   };
 }
 
@@ -137,19 +137,19 @@ export async function debit(input: DebitInput) {
 
   const session = await prisma.casinoGameSession.findUnique({
     where: { token: input.sessionToken },
-    include: { wallet: true, game: true },
+    include: { casinoWallet: true, casinoGame: true },
   });
-  if (!session || session.userId !== input.userId) {
+  if (!session || session.casinoUserId !== input.userId) {
     throw { status: 404, error: "Session not found" };
   }
 
-  if (debitAmount < session.game.minBet || debitAmount > session.game.maxBet) {
+  if (debitAmount < session.casinoGame.minBet || debitAmount > session.casinoGame.maxBet) {
     throw { status: 400, error: "Bet amount out of range" };
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const wallet = await tx.casinoWallet.findUnique({
-      where: { id: session.walletId },
+      where: { id: session.casinoWalletId },
     });
     if (!wallet) throw new Error("Wallet not found");
 
@@ -173,8 +173,8 @@ export async function debit(input: DebitInput) {
 
     await tx.casinoTransaction.create({
       data: {
-        walletId: wallet.id,
-        sessionId: session.id,
+        casinoWalletId: wallet.id,
+        casinoGameSessionId: session.id,
         transactionType: "debit",
         amount: debitAmount,
         externalTransactionId: input.transactionId,
@@ -216,15 +216,15 @@ export async function credit(input: CreditInput) {
 
   const session = await prisma.casinoGameSession.findUnique({
     where: { token: input.sessionToken },
-    include: { wallet: true },
+    include: { casinoWallet: true },
   });
-  if (!session || session.userId !== input.userId) {
+  if (!session || session.casinoUserId !== input.userId) {
     throw { status: 404, error: "Session not found" };
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const wallet = await tx.casinoWallet.findUnique({
-      where: { id: session.walletId },
+      where: { id: session.casinoWalletId },
     });
     if (!wallet) throw new Error("Wallet not found");
 
@@ -244,8 +244,8 @@ export async function credit(input: CreditInput) {
 
     await tx.casinoTransaction.create({
       data: {
-        walletId: wallet.id,
-        sessionId: session.id,
+        casinoWalletId: wallet.id,
+        casinoGameSessionId: session.id,
         transactionType: "credit",
         amount: creditAmount,
         externalTransactionId: input.transactionId,
@@ -285,9 +285,9 @@ export async function rollback(input: RollbackInput) {
 
   const session = await prisma.casinoGameSession.findUnique({
     where: { token: input.sessionToken },
-    include: { wallet: true },
+    include: { casinoWallet: true },
   });
-  if (!session || session.userId !== input.userId) {
+  if (!session || session.casinoUserId !== input.userId) {
     throw { status: 404, error: "Session not found" };
   }
 
@@ -300,22 +300,22 @@ export async function rollback(input: RollbackInput) {
   if (!originalTx) {
     const tombstoneResponse = {
       transactionId: input.transactionId,
-      balance: session.wallet.playableBalance.toString(),
-      currency: session.wallet.currencyCode,
+      balance: session.casinoWallet.playableBalance.toString(),
+      currency: session.casinoWallet.currencyCode,
       status: "ok",
       tombstone: true,
     };
 
     await prisma.casinoTransaction.create({
       data: {
-        walletId: session.walletId,
-        sessionId: session.id,
+        casinoWalletId: session.casinoWalletId,
+        casinoGameSessionId: session.id,
         transactionType: "rollback",
         amount: BigInt(0),
         externalTransactionId: input.transactionId,
         externalRoundId: input.roundId,
         relatedExternalTransactionId: input.originalTransactionId,
-        balanceAfter: session.wallet.playableBalance,
+        balanceAfter: session.casinoWallet.playableBalance,
         responseCache: tombstoneResponse,
       },
     });
@@ -345,7 +345,7 @@ export async function rollback(input: RollbackInput) {
 
   const result = await prisma.$transaction(async (tx) => {
     const wallet = await tx.casinoWallet.findUnique({
-      where: { id: session.walletId },
+      where: { id: session.casinoWalletId },
     });
     if (!wallet) throw new Error("Wallet not found");
 
@@ -365,8 +365,8 @@ export async function rollback(input: RollbackInput) {
 
     await tx.casinoTransaction.create({
       data: {
-        walletId: wallet.id,
-        sessionId: session.id,
+        casinoWalletId: wallet.id,
+        casinoGameSessionId: session.id,
         transactionType: "rollback",
         amount: originalTx.amount,
         externalTransactionId: input.transactionId,
@@ -398,14 +398,16 @@ interface SimulateRoundInput {
 export async function simulateRound(input: SimulateRoundInput) {
   const user = await prisma.casinoUser.findUnique({
     where: { id: input.userId },
-    include: { wallet: true },
+    include: { casinoWallets: true },
   });
-  if (!user || !user.wallet)
+  if (!user || !user.casinoWallets[0])
     throw { status: 404, error: "User or wallet not found" };
+
+  const wallet = user.casinoWallets[0];
 
   const game = await prisma.casinoGame.findUnique({
     where: { id: input.gameId },
-    include: { provider: true },
+    include: { casinoGameProvider: true },
   });
   if (!game || !game.isActive)
     throw { status: 404, error: "Game not found or inactive" };
@@ -414,9 +416,9 @@ export async function simulateRound(input: SimulateRoundInput) {
   const session = await prisma.casinoGameSession.create({
     data: {
       token: sessionToken,
-      userId: user.id,
-      walletId: user.wallet.id,
-      gameId: game.id,
+      casinoUserId: user.id,
+      casinoWalletId: wallet.id,
+      casinoGameId: game.id,
       isActive: true,
     },
   });
@@ -428,11 +430,11 @@ export async function simulateRound(input: SimulateRoundInput) {
     casinoSessionId: session.id,
     userId: user.id,
     gameId: game.providerGameId,
-    currency: input.currency || user.wallet.currencyCode,
-    casinoCode: game.provider.code,
+    currency: input.currency || wallet.currencyCode,
+    casinoCode: game.casinoGameProvider.code,
   };
 
-  const providerBaseUrl = game.provider.apiEndpoint;
+  const providerBaseUrl = game.casinoGameProvider.apiEndpoint;
   const launchSig = signBody(launchPayload, providerSecret);
 
   const launchRes = await fetch(`${providerBaseUrl}/provider/launch`, {
@@ -463,8 +465,8 @@ export async function simulateRound(input: SimulateRoundInput) {
     providerSessionId: launchData.providerSessionId,
     userId: user.id,
     gameId: game.providerGameId,
-    currency: input.currency || user.wallet.currencyCode,
-    casinoCode: game.provider.code,
+    currency: input.currency || wallet.currencyCode,
+    casinoCode: game.casinoGameProvider.code,
   };
 
   const simSig = signBody(simulatePayload, providerSecret);
@@ -488,7 +490,7 @@ export async function simulateRound(input: SimulateRoundInput) {
 
   // Fetch final balance
   const finalWallet = await prisma.casinoWallet.findUnique({
-    where: { id: user.wallet.id },
+    where: { id: wallet.id },
   });
 
   console.info("SimulateRound completed", { sessionId: session.id });

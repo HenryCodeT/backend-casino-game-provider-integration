@@ -48,7 +48,7 @@ async function main() {
 
   const wallet1 = await prisma.casinoWallet.create({
     data: {
-      userId: user1.id,
+      casinoUserId: user1.id,
       currencyCode: "USD",
       playableBalance: BigInt(1000000), // $10,000.00
       redeemableBalance: BigInt(500000), // $5,000.00
@@ -57,7 +57,7 @@ async function main() {
 
   const wallet2 = await prisma.casinoWallet.create({
     data: {
-      userId: user2.id,
+      casinoUserId: user2.id,
       currencyCode: "USD",
       playableBalance: BigInt(500000), // $5,000.00
       redeemableBalance: BigInt(250000), // $2,500.00
@@ -82,7 +82,7 @@ async function main() {
 
   const game1 = await prisma.casinoGame.create({
     data: {
-      providerId: provider.id,
+      casinoGameProviderId: provider.id,
       providerGameId: "SLOTS_001",
       isActive: true,
       minBet: BigInt(10), // $0.10
@@ -92,7 +92,7 @@ async function main() {
 
   const game2 = await prisma.casinoGame.create({
     data: {
-      providerId: provider.id,
+      casinoGameProviderId: provider.id,
       providerGameId: "ROULETTE_001",
       isActive: true,
       minBet: BigInt(50), // $0.50
