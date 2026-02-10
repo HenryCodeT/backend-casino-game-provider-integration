@@ -14,89 +14,97 @@ model CasinoUser {
   email     String   @db.VarChar(255)
   createdAt DateTime @default(now()) @map("created_at")
 
-  wallet   CasinoWallet?
-  sessions CasinoGameSession[]
+  casinoWallets      CasinoWallet[]
+  casinoGameSessions CasinoGameSession[]
 
   @@map("casino_users")
 }
 
 model CasinoWallet {
-  id                Int      @id @default(autoincrement())
-  userId            Int      @unique @map("user_id")
+  id Int @id @default(autoincrement())
+
+  casinoUserId Int @unique @map("user_id")
+
   currencyCode      String   @map("currency_code") @db.VarChar(10)
   playableBalance   BigInt   @default(0) @map("playable_balance")
   redeemableBalance BigInt   @default(0) @map("redeemable_balance")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user         CasinoUser          @relation(fields: [userId], references: [id])
-  sessions     CasinoGameSession[]
-  transactions CasinoTransaction[]
+  casinoUser         CasinoUser          @relation(fields: [casinoUserId], references: [id])
+  casinoGameSessions CasinoGameSession[]
+  casinoTransactions CasinoTransaction[]
 
   @@map("casino_wallets")
 }
 
 model CasinoGameProvider {
   id          Int      @id @default(autoincrement())
-  code        String   @unique @db.VarChar(50)
+  code        String   @unique @db.VarChar(50) // Unique code for the casino game provider.
   name        String   @db.VarChar(100)
   apiEndpoint String   @map("api_endpoint") @db.VarChar(500)
   secretKey   String   @map("secret_key") @db.VarChar(500)
   isDisabled  Boolean  @default(false) @map("is_disabled")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  games CasinoGame[]
+  casinoGames CasinoGame[]
 
   @@map("casino_game_providers")
 }
 
 model CasinoGame {
-  id             Int      @id @default(autoincrement())
-  providerId     Int      @map("provider_id")
-  providerGameId String   @map("provider_game_id") @db.VarChar(100)
+  id Int @id @default(autoincrement())
+
+  casinoGameProviderId Int @map("provider_id")
+
+  providerGameId String   @map("provider_game_id") @db.VarChar(100) // Provider-side game identifier mapped to this casino game.
   isActive       Boolean  @default(true) @map("is_active")
   minBet         BigInt   @default(100) @map("min_bet")
   maxBet         BigInt   @default(100000) @map("max_bet")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  provider CasinoGameProvider @relation(fields: [providerId], references: [id])
-  sessions CasinoGameSession[]
+  casinoGameProvider CasinoGameProvider  @relation(fields: [casinoGameProviderId], references: [id])
+  casinoGameSessions CasinoGameSession[]
 
   @@map("casino_games")
 }
 
 model CasinoGameSession {
-  id                Int      @id @default(autoincrement())
-  token             String   @unique @db.VarChar(255)
-  userId            Int      @map("user_id")
-  walletId          Int      @map("wallet_id")
-  gameId            Int      @map("game_id")
-  providerSessionId String?  @map("provider_session_id") @db.VarChar(255)
+  id    Int    @id @default(autoincrement())
+  token String @unique @db.VarChar(255)
+
+  casinoUserId   Int @map("user_id")
+  casinoWalletId Int @map("wallet_id")
+  casinoGameId   Int @map("game_id")
+
+  providerSessionId String?  @map("provider_session_id") @db.VarChar(255) // Provider-generated session identifier created during /provider/launch.
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  user         CasinoUser          @relation(fields: [userId], references: [id])
-  wallet       CasinoWallet        @relation(fields: [walletId], references: [id])
-  game         CasinoGame          @relation(fields: [gameId], references: [id])
-  transactions CasinoTransaction[]
+  casinoUser         CasinoUser          @relation(fields: [casinoUserId], references: [id])
+  casinoWallet       CasinoWallet        @relation(fields: [casinoWalletId], references: [id])
+  casinoGame         CasinoGame          @relation(fields: [casinoGameId], references: [id])
+  casinoTransactions CasinoTransaction[] //A casino game session can have 0 or many casino transactions
 
   @@map("casino_game_sessions")
 }
 
 model CasinoTransaction {
-  id                           Int      @id @default(autoincrement())
-  walletId                     Int      @map("wallet_id")
-  sessionId                    Int      @map("session_id")
+  id Int @id @default(autoincrement())
+
+  casinoWalletId      Int @map("wallet_id")
+  casinoGameSessionId Int @map("session_id")
+
   transactionType              String   @map("transaction_type") @db.VarChar(20)
   amount                       BigInt
-  externalTransactionId        String   @unique @map("external_transaction_id") @db.VarChar(255)
-  externalRoundId              String?  @map("external_round_id") @db.VarChar(255)
-  relatedExternalTransactionId String?  @map("related_external_transaction_id") @db.VarChar(255)
+  externalTransactionId        String   @unique @map("external_transaction_id") @db.VarChar(255) // Provider-generated unique transaction ID for idempotency.
+  externalRoundId              String?  @map("external_round_id") @db.VarChar(255) // Provider round identifier used for grouping and validation.
+  relatedExternalTransactionId String?  @map("related_external_transaction_id") @db.VarChar(255) // Reference to a previous provider transaction
   balanceAfter                 BigInt   @map("balance_after")
   responseCache                Json?    @map("response_cache")
   createdAt                    DateTime @default(now()) @map("created_at")
 
-  wallet  CasinoWallet     @relation(fields: [walletId], references: [id])
-  session CasinoGameSession @relation(fields: [sessionId], references: [id])
+  casinoWallet      CasinoWallet      @relation(fields: [casinoWalletId], references: [id])
+  casinoGameSession CasinoGameSession @relation(fields: [casinoGameSessionId], references: [id])
 
   @@map("casino_transactions")
 }
@@ -105,73 +113,79 @@ model CasinoTransaction {
 
 model ProviderGame {
   id        Int      @id @default(autoincrement())
-  gameId    String   @unique @map("game_id") @db.VarChar(100)
+  gameId    String   @unique @map("game_id") @db.VarChar(100) // ID of the game in the provider database.
   isActive  Boolean  @default(true) @map("is_active")
   minBet    BigInt   @default(100) @map("min_bet")
   maxBet    BigInt   @default(100000) @map("max_bet")
   createdAt DateTime @default(now()) @map("created_at")
 
-  rounds ProviderGameRound[]
+  providerGameRounds ProviderGameRound[]
 
   @@map("provider_games")
 }
 
 model ProviderCasino {
   id                Int      @id @default(autoincrement())
-  casinoCode        String   @unique @map("casino_code") @db.VarChar(50)
+  casinoCode        String   @unique @map("casino_code") @db.VarChar(50) // Casino side unique code for the provider casino.
   name              String   @db.VarChar(100)
   casinoApiEndpoint String   @map("casino_api_endpoint") @db.VarChar(500)
   casinoSecret      String   @map("casino_secret") @db.VarChar(500)
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  users  ProviderCasinoUser[]
-  rounds ProviderGameRound[]
-  bets   ProviderBet[]
+  providerCasinoUsers ProviderCasinoUser[]
+  providerGameRounds  ProviderGameRound[]
+  providerBets        ProviderBet[]
 
   @@map("provider_casinos")
 }
 
 model ProviderCasinoUser {
-  id           Int      @id @default(autoincrement())
-  casinoId     Int      @map("casino_id")
-  casinoUserId Int      @map("casino_user_id")
+  id Int @id @default(autoincrement())
+
+  providerCasinoId Int @map("casino_id")
+
+  casinoUserId Int      @map("casino_user_id") // Casino-side user ID mapped to this provider user.
   playerKey    String   @unique @map("player_key") @db.VarChar(255)
   createdAt    DateTime @default(now()) @map("created_at")
 
-  casino ProviderCasino      @relation(fields: [casinoId], references: [id])
-  rounds ProviderGameRound[]
+  providerCasino     ProviderCasino      @relation(fields: [providerCasinoId], references: [id])
+  providerGameRounds ProviderGameRound[] //A provider casino user can have 0 or many provider game rounds
 
   @@map("provider_casino_users")
 }
 
 model ProviderGameRound {
-  id                   Int      @id @default(autoincrement())
-  roundId              String   @unique @map("round_id") @db.VarChar(255)
-  sessionId            String   @map("session_id") @db.VarChar(255)
-  casinoId             Int      @map("casino_id")
-  casinoUserId         Int      @map("casino_user_id")
-  providerCasinoUserId Int      @map("provider_casino_user_id")
-  gameId               Int      @map("game_id")
-  currency             String   @db.VarChar(10)
-  status               String   @default("open") @db.VarChar(20)
-  totalBetAmount       BigInt   @default(0) @map("total_bet_amount")
-  totalPayoutAmount    BigInt   @default(0) @map("total_payout_amount")
-  createdAt            DateTime @default(now()) @map("created_at")
+  id        Int    @id @default(autoincrement())
+  roundId   String @unique @map("round_id") @db.VarChar(255) // Provider-generated external identifier for a game round.
+  sessionId String @map("session_id") @db.VarChar(255) // Provider-generated session identifier created during /provider/launch.
 
-  casino             ProviderCasino     @relation(fields: [casinoId], references: [id])
+  providerCasinoId     Int @map("casino_id")
+  providerCasinoUserId Int @map("provider_casino_user_id")
+  providerGameId       Int @map("game_id")
+
+  casinoUserId      Int      @map("casino_user_id")
+  currency          String   @db.VarChar(10)
+  status            String   @default("open") @db.VarChar(20)
+  totalBetAmount    BigInt   @default(0) @map("total_bet_amount")
+  totalPayoutAmount BigInt   @default(0) @map("total_payout_amount")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  providerCasino     ProviderCasino     @relation(fields: [providerCasinoId], references: [id])
   providerCasinoUser ProviderCasinoUser @relation(fields: [providerCasinoUserId], references: [id])
-  game               ProviderGame       @relation(fields: [gameId], references: [id])
-  bets               ProviderBet[]
+  providerGame       ProviderGame       @relation(fields: [providerGameId], references: [id])
+  providerBets       ProviderBet[]
 
   @@map("provider_game_rounds")
 }
 
 model ProviderBet {
-  id                 Int      @id @default(autoincrement())
-  transactionId      String   @unique @map("transaction_id") @db.VarChar(255)
-  roundId            Int      @map("round_id")
-  casinoId           Int      @map("casino_id")
+  id            Int    @id @default(autoincrement())
+  transactionId String @unique @map("transaction_id") @db.VarChar(255)
+
+  providerGameRoundId Int @map("round_id")
+  providerCasinoId    Int @map("casino_id")
+
   casinoUserId       Int      @map("casino_user_id")
   betType            String   @map("bet_type") @db.VarChar(20)
   amount             BigInt
@@ -180,8 +194,8 @@ model ProviderBet {
   responseCache      Json?    @map("response_cache")
   createdAt          DateTime @default(now()) @map("created_at")
 
-  round  ProviderGameRound @relation(fields: [roundId], references: [id])
-  casino ProviderCasino    @relation(fields: [casinoId], references: [id])
+  providerGameRound ProviderGameRound @relation(fields: [providerGameRoundId], references: [id])
+  providerCasino    ProviderCasino    @relation(fields: [providerCasinoId], references: [id])
 
   @@map("provider_bets")
 }
