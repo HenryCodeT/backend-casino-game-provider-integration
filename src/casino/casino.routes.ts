@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifyCasinoSignature } from "./casino.hmac";
 import {
   launchGame,
+  simulateRound,
   getBalance,
   debit,
   credit,
@@ -12,6 +13,7 @@ const router: Router = Router();
 
 // Client-initiated (no HMAC needed — would normally use user auth)
 router.post("/launchGame", launchGame);
+router.post("/simulateRound", simulateRound);
 
 // Provider callbacks (HMAC-protected)
 router.post("/getBalance", verifyCasinoSignature, getBalance);

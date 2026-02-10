@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { verifySignature } from "../lib/hmac";
-import { logger } from "../utils/logger";
 
 export function verifyProviderSignature(
   req: Request,
@@ -9,14 +8,14 @@ export function verifyProviderSignature(
 ): void {
   const secret = process.env.PROVIDER_SECRET;
   if (!secret) {
-    logger.error("PROVIDER_SECRET not configured");
+    console.error("PROVIDER_SECRET not configured");
     res.status(500).json({ error: "Server misconfiguration" });
     return;
   }
 
   const signature = req.header("x-provider-signature");
   if (!verifySignature(signature, req.body, secret)) {
-    logger.warn("Invalid provider signature", {
+    console.warn("Invalid provider signature", {
       path: req.path,
       ip: req.ip,
     });
