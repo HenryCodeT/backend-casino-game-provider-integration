@@ -8,7 +8,7 @@ async function callCasino(
   casino: { casinoApiEndpoint: string; casinoSecret: string },
   path: string,
   body: Record<string, unknown>
-) {
+): Promise<{ ok: boolean; status: number; data: any }> {
   const url = `${casino.casinoApiEndpoint}/casino${path}`;
   const signature = signBody(body, casino.casinoSecret);
 
@@ -159,7 +159,7 @@ export async function simulateRound(input: SimulateInput) {
       transactionId: bet1TxId,
       roundId: round.id,
       casinoId: casino.id,
-      casinoUserId: input.userId,
+      casinoUserId: Number(input.userId),
       betType: "debit",
       amount: BigInt(bet1Amount),
       casinoBalanceAfter: bet1Res.ok ? BigInt(bet1Res.data.balance) : null,
@@ -190,7 +190,7 @@ export async function simulateRound(input: SimulateInput) {
       transactionId: bet2TxId,
       roundId: round.id,
       casinoId: casino.id,
-      casinoUserId: input.userId,
+      casinoUserId: Number(input.userId),
       betType: "debit",
       amount: BigInt(bet2Amount),
       casinoBalanceAfter: bet2Res.ok ? BigInt(bet2Res.data.balance) : null,
@@ -216,7 +216,7 @@ export async function simulateRound(input: SimulateInput) {
       transactionId: rollbackTxId,
       roundId: round.id,
       casinoId: casino.id,
-      casinoUserId: input.userId,
+      casinoUserId: Number(input.userId),
       betType: "rollback",
       amount: BigInt(bet2Amount),
       casinoBalanceAfter: rollbackRes.ok ? BigInt(rollbackRes.data.balance) : null,
@@ -244,7 +244,7 @@ export async function simulateRound(input: SimulateInput) {
       transactionId: payoutTxId,
       roundId: round.id,
       casinoId: casino.id,
-      casinoUserId: input.userId,
+      casinoUserId: Number(input.userId),
       betType: "credit",
       amount: BigInt(payoutAmount),
       casinoBalanceAfter: payoutRes.ok ? BigInt(payoutRes.data.balance) : null,

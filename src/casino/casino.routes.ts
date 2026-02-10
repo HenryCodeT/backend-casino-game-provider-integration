@@ -7,7 +7,7 @@ import {
   debit,
   credit,
   rollback,
-} from "./casino.handlers";
+} from "./casino.controller";
 
 const router: Router = Router();
 
