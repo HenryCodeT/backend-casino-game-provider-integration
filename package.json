@@ -18,6 +18,7 @@
     "prisma:studio": "npx prisma studio",
     "seed": "tsx prisma/seed.ts",
     "simulate": "tsx scripts/simulate.ts",
+    "db:dump": "tsx scripts/db-dump.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\""

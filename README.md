@@ -413,6 +413,265 @@ Balance: **1,001,000** (unchanged — rollback denied)
 
 
 
+## Database State After Simulation
+
+Run `pnpm db:dump` to verify. Below is the expected state after seeding + one simulation run:
+
+```json
+{
+  "casino_users": [
+    {
+      "id": 1,
+      "username": "player1",
+      "email": "player1@example.com"
+    },
+    {
+      "id": 2,
+      "username": "player2",
+      "email": "player2@example.com"
+    }
+  ],
+  "casino_wallets": [
+    {
+      "id": 1,
+      "casinoUserId": 1,
+      "currencyCode": "USD",
+      "playableBalance": "1001000",
+      "redeemableBalance": "500000"
+    },
+    {
+      "id": 2,
+      "casinoUserId": 2,
+      "currencyCode": "USD",
+      "playableBalance": "500000",
+      "redeemableBalance": "250000"
+    }
+  ],
+  "casino_game_providers": [
+    {
+      "id": 1,
+      "code": "JAQPOT",
+      "name": "Jaqpot Games",
+      "apiEndpoint": "http://localhost:3000",
+      "secretKey": "provider_secret_key_change_in_production",
+      "isDisabled": false
+    }
+  ],
+  "casino_games": [
+    {
+      "id": 1,
+      "casinoGameProviderId": 1,
+      "providerGameId": "SLOTS_001",
+      "isActive": true,
+      "minBet": "1000",
+      "maxBet": "100000"
+    },
+    {
+      "id": 2,
+      "casinoGameProviderId": 1,
+      "providerGameId": "ROULETTE_001",
+      "isActive": true,
+      "minBet": "1000",
+      "maxBet": "500000"
+    }
+  ],
+  "casino_game_sessions": [
+    {
+      "id": 1,
+      "token": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+      "casinoUserId": 1,
+      "casinoWalletId": 1,
+      "casinoGameId": 1,
+      "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+      "isActive": true
+    }
+  ],
+  "casino_transactions": [
+    {
+      "id": 1,
+      "casinoWalletId": 1,
+      "casinoGameSessionId": 1,
+      "transactionType": "debit",
+      "amount": "1000",
+      "externalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "relatedExternalTransactionId": null,
+      "balanceAfter": "999000",
+      "responseCache": {
+        "status": "ok",
+        "balance": "999000",
+        "currency": "USD",
+        "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
+      }
+    },
+    {
+      "id": 2,
+      "casinoWalletId": 1,
+      "casinoGameSessionId": 1,
+      "transactionType": "debit",
+      "amount": "1000",
+      "externalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "relatedExternalTransactionId": null,
+      "balanceAfter": "998000",
+      "responseCache": {
+        "status": "ok",
+        "balance": "998000",
+        "currency": "USD",
+        "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd"
+      }
+    },
+    {
+      "id": 3,
+      "casinoWalletId": 1,
+      "casinoGameSessionId": 1,
+      "transactionType": "rollback",
+      "amount": "1000",
+      "externalTransactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "relatedExternalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+      "balanceAfter": "999000",
+      "responseCache": {
+        "status": "ok",
+        "balance": "999000",
+        "currency": "USD",
+        "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795"
+      }
+    },
+    {
+      "id": 4,
+      "casinoWalletId": 1,
+      "casinoGameSessionId": 1,
+      "transactionType": "credit",
+      "amount": "2000",
+      "externalTransactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "relatedExternalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+      "balanceAfter": "1001000",
+      "responseCache": {
+        "status": "ok",
+        "balance": "1001000",
+        "currency": "USD",
+        "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4"
+      }
+    },
+    {
+      "id": 5,
+      "casinoWalletId": 1,
+      "casinoGameSessionId": 1,
+      "transactionType": "rollback",
+      "amount": "0",
+      "externalTransactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
+      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "relatedExternalTransactionId": "non-existent-tx-id",
+      "balanceAfter": "1001000",
+      "responseCache": {
+        "status": "ok",
+        "balance": "1001000",
+        "currency": "USD",
+        "tombstone": true,
+        "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e"
+      }
+    }
+  ],
+  "provider_games": [
+    {
+      "id": 1,
+      "gameId": "SLOTS_001",
+      "isActive": true,
+      "minBet": "1000",
+      "maxBet": "100000"
+    },
+    {
+      "id": 2,
+      "gameId": "ROULETTE_001",
+      "isActive": true,
+      "minBet": "1000",
+      "maxBet": "500000"
+    }
+  ],
+  "provider_casinos": [
+    {
+      "id": 1,
+      "casinoCode": "JAQPOT",
+      "name": "Jaqpot Casino",
+      "casinoApiEndpoint": "http://localhost:3000",
+      "casinoSecret": "casino_secret_key_change_in_production",
+      "isActive": true
+    }
+  ],
+  "provider_casino_users": [
+    {
+      "id": 1,
+      "providerCasinoId": 1,
+      "casinoUserId": 1,
+      "playerKey": "JAQPOT:1"
+    }
+  ],
+  "provider_game_rounds": [
+    {
+      "id": 1,
+      "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "sessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+      "providerCasinoId": 1,
+      "providerCasinoUserId": 1,
+      "providerGameId": 1,
+      "casinoUserId": 1,
+      "currency": "USD",
+      "status": "closed",
+      "totalBetAmount": "1000",
+      "totalPayoutAmount": "2000"
+    }
+  ],
+  "provider_bets": [
+    {
+      "id": 1,
+      "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+      "providerGameRoundId": 1,
+      "providerCasinoId": 1,
+      "casinoUserId": 1,
+      "betType": "debit",
+      "amount": "1000",
+      "casinoBalanceAfter": "999000",
+      "status": "accepted"
+    },
+    {
+      "id": 2,
+      "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+      "providerGameRoundId": 1,
+      "providerCasinoId": 1,
+      "casinoUserId": 1,
+      "betType": "debit",
+      "amount": "1000",
+      "casinoBalanceAfter": "998000",
+      "status": "accepted"
+    },
+    {
+      "id": 3,
+      "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+      "providerGameRoundId": 1,
+      "providerCasinoId": 1,
+      "casinoUserId": 1,
+      "betType": "rollback",
+      "amount": "1000",
+      "casinoBalanceAfter": "999000",
+      "status": "accepted"
+    },
+    {
+      "id": 4,
+      "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+      "providerGameRoundId": 1,
+      "providerCasinoId": 1,
+      "casinoUserId": 1,
+      "betType": "credit",
+      "amount": "2000",
+      "casinoBalanceAfter": "1001000",
+      "status": "accepted"
+    }
+  ]
+}
+```
+
 ## Design Decisions
 
 - **Single codebase:** As specified by the test. Both domains remain logically isolated — Casino never writes to Provider tables and vice versa. All cross-domain communication happens through HTTP.
