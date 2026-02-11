@@ -15,13 +15,40 @@ The Casino is the **sole source of truth** for wallet balances. The Provider nev
 
 ## Setup
 
+### Option A: Docker
+
+```bash
+# 1. Build and start PostgreSQL + app
+docker compose up --build
+
+# 2. Seed demo data (in a separate terminal)
+docker compose exec app pnpm seed
+
+# 3. Run simulation
+docker compose exec app pnpm simulate
+
+# 4. Dump database state
+docker compose exec app pnpm db:dump
+
+# Stop and remove containers
+docker compose down
+
+# Stop and remove containers + delete database volume
+docker compose down -v
+```
+
+### Option B: Local
+
+Prerequisites:
+- PostgreSQL running locally
+- Configure the connection string in `.env` with format: `postgresql://<user>:<password>@<host>:<port>/<database>?schema=public`
+
 ```bash
 # 1. Install dependencies
 pnpm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your PostgreSQL credentials if needed
 
 # 3. Generate Prisma client
 pnpm prisma:generate
@@ -34,6 +61,12 @@ pnpm seed
 
 # 6. Start the server
 pnpm dev
+
+# 7. Run simulation (in a separate terminal)
+pnpm simulate
+
+# 8. Dump database state
+pnpm db:dump
 ```
 
 ## Environment Variables

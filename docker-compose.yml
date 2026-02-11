@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: casino_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/casino_db?schema=public
+      PORT: 3000
+      CASINO_SECRET: casino_secret_key_change_in_production
+      PROVIDER_SECRET: provider_secret_key_change_in_production
+      CASINO_BASE_URL: http://localhost:3000
+      PROVIDER_BASE_URL: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate deploy && pnpm dev"
+
+volumes:
+  pgdata:
