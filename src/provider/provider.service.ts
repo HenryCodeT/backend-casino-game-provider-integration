@@ -77,6 +77,9 @@ export async function launchSession(input: LaunchInput) {
     providerSessionId,
     gameId: input.gameId,
     currency: input.currency,
+    minBet: game.minBet.toString(),
+    maxBet: game.maxBet.toString(),
+    playerId: casinoUser.id,
   };
 }
 
@@ -146,7 +149,7 @@ export async function simulateRound(input: SimulateInput) {
   const bet1TxId = randomUUID();
   const bet1Amount = Number(game.minBet);
 
-  const bet1Res = await callCasino(casino, "/debit", {
+  const bet1Response = await callCasino(casino, "/debit", {
     sessionToken: input.sessionToken,
     userId: input.userId,
     transactionId: bet1TxId,
@@ -162,15 +165,15 @@ export async function simulateRound(input: SimulateInput) {
       casinoUserId: Number(input.userId),
       betType: "debit",
       amount: BigInt(bet1Amount),
-      casinoBalanceAfter: bet1Res.ok ? BigInt(bet1Res.data.balance) : null,
-      status: bet1Res.ok ? "accepted" : "failed",
-      responseCache: bet1Res.data,
+      casinoBalanceAfter: bet1Response.ok ? BigInt(bet1Response.data.balance) : null,
+      status: bet1Response.ok ? "accepted" : "failed",
+      responseCache: bet1Response.data,
     },
   });
-  steps.push({ step: "bet_1_debit", data: bet1Res.data });
+  steps.push({ step: "bet_1_debit", data: bet1Response.data });
 
-  if (!bet1Res.ok) {
-    throw { status: 502, error: "First bet failed", details: bet1Res.data };
+  if (!bet1Response.ok) {
+    throw { status: 502, error: "First bet failed", details: bet1Response.data };
   }
 
   // ── Step 3: Second bet (debit)

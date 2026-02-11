@@ -139,7 +139,34 @@ This executes a complete round: launch → balance check → 2 bets → rollback
 ## Key Design Decisions
 
 - **Idempotency**: All money-moving endpoints (`/casino/debit`, `/casino/credit`, `/casino/rollback`) use `externalTransactionId` as idempotency key. Duplicate requests return the cached first response.
-- **Atomic balance updates**: All wallet mutations happen inside Prisma `$transaction` blocks.
+- **Atomic balance updates**: All wallet mutations (`/casino/debit`, `/casino/credit`, `/casino/rollback`) happen inside Prisma interactive transactions (`$transaction`). An interactive transaction wraps multiple database operations into a single atomic unit — if any step fails (e.g., insufficient funds, constraint violation), **all changes are automatically rolled back** and the database remains in its previous consistent state. This guarantees that the balance read, the balance update, and the transaction record insert either all succeed together or none of them are applied, preventing partial writes that could leave the wallet in an inconsistent state.
 - **Rollback rules**: Only debits (bets) can be rolled back. Tombstone markers are created for unknown original transactions.
 - **HMAC-SHA256 authentication**: Provider→Casino uses `x-casino-signature` + `CASINO_SECRET`. Casino→Provider uses `x-provider-signature` + `PROVIDER_SECRET`.
 - **Logical separation**: Casino and Provider domains are fully separated in code (`/casino/*`, `/provider/*`) and database (`casino_*`, `provider_*` tables).
+
+## Production Improvements
+
+The following improvements were intentionally omitted following the test guideline: *"Focus on correctness, clarity, and robustness rather than over-engineering."*
+
+### Pessimistic Locking for Wallet Operations
+
+All wallet balance updates run inside Prisma interactive transactions (`$transaction`), which guarantee atomicity — if any step fails, all changes are rolled back. However, under high concurrency, two simultaneous requests could read the same balance before either writes, leading to a lost update (race condition).
+
+In production, this would be solved with `SELECT ... FOR UPDATE` (pessimistic locking), which acquires an exclusive row-level lock on the wallet row before reading:
+
+```sql
+-- Current (optimistic — sufficient for single-threaded access):
+SELECT * FROM casino_wallets WHERE id = $1;
+
+-- Production (pessimistic — safe under concurrency):
+SELECT * FROM casino_wallets WHERE id = $1 FOR UPDATE;
+```
+
+The second concurrent request would wait until the first transaction completes, ensuring balance reads are always up-to-date. This applies to `/casino/debit`, `/casino/credit`, and `/casino/rollback`.
+
+### Other Potential Improvements
+
+- **Request timeout on provider calls**: Add `AbortController` with timeout to prevent the casino from hanging if the provider is unresponsive.
+- **Rate limiting**: Protect callback endpoints from excessive retry storms.
+- **Structured logging**: Replace `console.info`/`console.error` with a production logger (e.g., pino/winston) with correlation IDs for request tracing.
+- **Input validation**: Add schema validation (e.g., Zod) at the controller layer to reject malformed requests early.

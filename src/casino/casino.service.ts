@@ -17,8 +17,9 @@ export async function launchGame(input: LaunchGameInput) {
   });
   if (!user) throw { status: 404, error: "User not found" };
 
-  const wallet = user.casinoWallets[0];
-  if (!wallet) throw { status: 404, error: "Wallet not found" };
+  const currency = input.currency || user.casinoWallets[0]?.currencyCode;
+  const wallet = user.casinoWallets.find(w => w.currencyCode === currency);
+  if (!wallet) throw { status: 404, error: "Wallet not found for the requested currency" };
 
   const game = await prisma.casinoGame.findUnique({
     where: { id: input.gameId },
@@ -42,13 +43,13 @@ export async function launchGame(input: LaunchGameInput) {
   });
 
   // Call the provider /provider/launch
-  const providerSecret = process.env.PROVIDER_SECRET!;
+  const providerSecret = game.casinoGameProvider.secretKey;
   const launchPayload = {
     sessionToken,
     casinoSessionId: session.id,
     userId: user.id,
     gameId: game.providerGameId,
-    currency: input.currency || wallet.currencyCode,
+    currency: wallet.currencyCode,
     casinoCode: game.casinoGameProvider.code,
   };
 
@@ -67,6 +68,10 @@ export async function launchGame(input: LaunchGameInput) {
   if (!providerRes.ok) {
     const errBody = await providerRes.text();
     console.error("Provider launch failed", { status: providerRes.status, body: errBody });
+    await prisma.casinoGameSession.update({
+      where: { id: session.id },
+      data: { isActive: false },
+    });
     throw { status: 502, error: "Provider launch failed" };
   }
 
@@ -147,6 +152,10 @@ export async function debit(input: DebitInput) {
     throw { status: 400, error: "Bet amount out of range" };
   }
 
+  // NOTE: In a high-concurrency production environment, this should use
+  // SELECT ... FOR UPDATE (pessimistic locking) to prevent race conditions.
+  // Prisma's interactive transaction provides atomicity, which is sufficient
+  // for this test scope without concurrent access.
   const result = await prisma.$transaction(async (tx) => {
     const wallet = await tx.casinoWallet.findUnique({
       where: { id: session.casinoWalletId },
@@ -396,110 +405,61 @@ interface SimulateRoundInput {
 }
 
 export async function simulateRound(input: SimulateRoundInput) {
-  const user = await prisma.casinoUser.findUnique({
-    where: { id: input.userId },
-    include: { casinoWallets: true },
-  });
-  if (!user || !user.casinoWallets[0])
-    throw { status: 404, error: "User or wallet not found" };
+  // Reuse launchGame to create session + call provider launch
+  const launchResult = await launchGame(input);
 
-  const wallet = user.casinoWallets[0];
-
+  // Need game data for provider call
   const game = await prisma.casinoGame.findUnique({
     where: { id: input.gameId },
     include: { casinoGameProvider: true },
   });
-  if (!game || !game.isActive)
-    throw { status: 404, error: "Game not found or inactive" };
+  if (!game) throw { status: 404, error: "Game not found" };
 
-  const sessionToken = randomUUID();
-  const session = await prisma.casinoGameSession.create({
-    data: {
-      token: sessionToken,
-      casinoUserId: user.id,
-      casinoWalletId: wallet.id,
-      casinoGameId: game.id,
-      isActive: true,
-    },
-  });
-
-  // Call provider /provider/launch
-  const providerSecret = process.env.PROVIDER_SECRET!;
-  const launchPayload = {
-    sessionToken,
-    casinoSessionId: session.id,
-    userId: user.id,
-    gameId: game.providerGameId,
-    currency: input.currency || wallet.currencyCode,
-    casinoCode: game.casinoGameProvider.code,
-  };
-
+  const providerSecret = game.casinoGameProvider.secretKey;
   const providerBaseUrl = game.casinoGameProvider.apiEndpoint;
-  const launchSig = signBody(launchPayload, providerSecret);
-
-  const launchRes = await fetch(`${providerBaseUrl}/provider/launch`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-provider-signature": launchSig,
-    },
-    body: JSON.stringify(launchPayload),
-  });
-
-  if (!launchRes.ok) {
-    throw { status: 502, error: "Provider launch failed" };
-  }
-
-  const launchData = (await launchRes.json()) as {
-    providerSessionId: string;
-  };
-
-  await prisma.casinoGameSession.update({
-    where: { id: session.id },
-    data: { providerSessionId: launchData.providerSessionId },
-  });
 
   // Call provider /provider/simulate
   const simulatePayload = {
-    sessionToken,
-    providerSessionId: launchData.providerSessionId,
-    userId: user.id,
+    sessionToken: launchResult.sessionToken,
+    providerSessionId: launchResult.providerSessionId,
+    userId: input.userId,
     gameId: game.providerGameId,
-    currency: input.currency || wallet.currencyCode,
+    currency: input.currency || "USD",
     casinoCode: game.casinoGameProvider.code,
   };
 
-  const simSig = signBody(simulatePayload, providerSecret);
+  const simulateSignature = signBody(simulatePayload, providerSecret);
 
-  const simRes = await fetch(`${providerBaseUrl}/provider/simulate`, {
+  const simulateResponse = await fetch(`${providerBaseUrl}/provider/simulate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-provider-signature": simSig,
+      "x-provider-signature": simulateSignature,
     },
     body: JSON.stringify(simulatePayload),
   });
 
-  if (!simRes.ok) {
-    const errBody = await simRes.text();
-    console.error("Provider simulate failed", { status: simRes.status, body: errBody });
+  if (!simulateResponse.ok) {
+    const errBody = await simulateResponse.text();
+    console.error("Provider simulate failed", { status: simulateResponse.status, body: errBody });
     throw { status: 502, error: "Provider simulate failed" };
   }
 
-  const simData = await simRes.json();
+  const simulateData = await simulateResponse.json();
 
   // Fetch final balance
-  const finalWallet = await prisma.casinoWallet.findUnique({
-    where: { id: wallet.id },
+  const session = await prisma.casinoGameSession.findUnique({
+    where: { id: launchResult.sessionId },
+    include: { casinoWallet: true },
   });
 
-  console.info("SimulateRound completed", { sessionId: session.id });
+  console.info("SimulateRound completed", { sessionId: launchResult.sessionId });
 
   return {
-    sessionToken,
-    sessionId: session.id,
-    providerSessionId: launchData.providerSessionId,
-    simulationResult: simData,
-    finalBalance: finalWallet?.playableBalance.toString(),
+    sessionToken: launchResult.sessionToken,
+    sessionId: launchResult.sessionId,
+    providerSessionId: launchResult.providerSessionId,
+    simulationResult: simulateData,
+    finalBalance: session?.casinoWallet.playableBalance.toString(),
   };
 }
