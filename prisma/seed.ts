@@ -15,22 +15,25 @@ async function main() {
 
   console.log("Starting database seed...");
 
-  // ── Clear existing data (child tables first) ─────────────────────
+  // ── Clear existing data and reset ID sequences ──────────────────
 
-  await prisma.providerBet.deleteMany();
-  await prisma.providerGameRound.deleteMany();
-  await prisma.providerCasinoUser.deleteMany();
-  await prisma.providerCasino.deleteMany();
-  await prisma.providerGame.deleteMany();
+  await prisma.$queryRawUnsafe(`
+    TRUNCATE TABLE
+      provider_bets,
+      provider_game_rounds,
+      provider_casino_users,
+      provider_casinos,
+      provider_games,
+      casino_transactions,
+      casino_game_sessions,
+      casino_games,
+      casino_game_providers,
+      casino_wallets,
+      casino_users
+    RESTART IDENTITY CASCADE
+  `);
 
-  await prisma.casinoTransaction.deleteMany();
-  await prisma.casinoGameSession.deleteMany();
-  await prisma.casinoGame.deleteMany();
-  await prisma.casinoGameProvider.deleteMany();
-  await prisma.casinoWallet.deleteMany();
-  await prisma.casinoUser.deleteMany();
-
-  console.log("Cleared existing data");
+  console.log("Cleared existing data (IDs reset)");
 
   // ── Casino Domain ─────────────────────────────────────────────────
 
@@ -89,7 +92,7 @@ async function main() {
       casinoGameProviderId: provider.id,
       providerGameId: "SLOTS_001",
       isActive: true,
-      minBet: BigInt(10), // $0.10
+      minBet: BigInt(1000), // $10.00
       maxBet: BigInt(100000), // $1,000.00
     },
   });
@@ -99,7 +102,7 @@ async function main() {
       casinoGameProviderId: provider.id,
       providerGameId: "ROULETTE_001",
       isActive: true,
-      minBet: BigInt(50), // $0.50
+      minBet: BigInt(1000), // $10.00
       maxBet: BigInt(500000), // $5,000.00
     },
   });
@@ -112,7 +115,7 @@ async function main() {
     data: {
       gameId: "SLOTS_001",
       isActive: true,
-      minBet: BigInt(10),
+      minBet: BigInt(1000),
       maxBet: BigInt(100000),
     },
   });
@@ -121,7 +124,7 @@ async function main() {
     data: {
       gameId: "ROULETTE_001",
       isActive: true,
-      minBet: BigInt(50),
+      minBet: BigInt(1000),
       maxBet: BigInt(500000),
     },
   });

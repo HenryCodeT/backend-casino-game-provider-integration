@@ -1,50 +1,17 @@
 # Casino & Game Provider Integration
 
-Backend integration between an online Casino Platform and an external Game Provider (Jaqpot Games).
+Bidirectional API integration between an online Casino Platform and an external Game Provider (Jaqpot Games). Both systems coexist in a single codebase with logical separation: namespaced endpoints (`/casino/*`, `/provider/*`) and prefixed database tables (`casino_*`, `provider_*`).
 
-## Architecture
-
-```
-src/
-├── app.ts                  ← Express app configuration
-├── index.ts                ← Server entry point
-├── db.ts                   ← Prisma client singleton
-│
-├── lib/
-│   └── hmac.ts             ← signBody / verifySignature (shared HMAC logic)
-│
-├── casino/
-│   ├── casino.routes.ts    ← /casino/* endpoints
-│   ├── casino.handlers.ts  ← Casino business logic
-│   └── casino.hmac.ts      ← Validates x-casino-signature (CASINO_SECRET)
-│
-├── provider/
-│   ├── provider.routes.ts  ← /provider/* endpoints
-│   ├── provider.handlers.ts← Provider business logic
-│   └── provider.hmac.ts    ← Validates x-provider-signature (PROVIDER_SECRET)
-│
-├── prisma/
-│   ├── schema.prisma       ← Database schema (CASINO_* and PROVIDER_* tables)
-│   └── seed.ts             ← Seed data for demo
-│
-└── utils/
-    └── logger.ts           ← Structured logger
-```
+The Casino is the **sole source of truth** for wallet balances. The Provider never reads or writes balances directly — all balance mutations happen exclusively through signed Casino callback APIs (`/casino/debit`, `/casino/credit`, `/casino/rollback`). Every money-moving operation is **atomic** (Prisma interactive transactions) and **strictly idempotent** (unique `external_transaction_id` per request with cached responses).
 
 ## Tech Stack
 
-- **Runtime**: Node.js v22
-- **Language**: TypeScript
-- **Framework**: Express.js
-- **Database**: PostgreSQL
-- **ORM**: Prisma 7
-- **Package Manager**: pnpm
-
-## Prerequisites
-
-- Node.js v18+
-- PostgreSQL running on `localhost:5432`
-- pnpm installed (`npm install -g pnpm`)
+- **Runtime:** Node.js v18+
+- **Language:** TypeScript
+- **Framework:** Express.js
+- **Database:** PostgreSQL
+- **ORM:** Prisma 7
+- **Package Manager:** pnpm
 
 ## Setup
 
@@ -52,64 +19,33 @@ src/
 # 1. Install dependencies
 pnpm install
 
-# 2. Copy environment variables
+# 2. Configure environment
 cp .env.example .env
+# Edit .env with your PostgreSQL credentials if needed
 
-# 3. Create the database and run migrations
+# 3. Generate Prisma client
+pnpm prisma:generate
+
+# 4. Run database migrations
 pnpm prisma:migrate
 
-# 4. Seed the database with demo data
+# 5. Seed demo data (2 users, 2 games, provider config)
 pnpm seed
 
-# 5. Generate Prisma client
-pnpm prisma:generate
-```
-
-## Running
-
-```bash
-# Development (hot reload)
+# 6. Start the server
 pnpm dev
-
-# Production
-pnpm build
-pnpm start
 ```
 
-## Running with Docker
+## Environment Variables
 
-```bash
-# Start PostgreSQL + API
-docker compose up -d
+| Variable          | Description                        |
+|-------------------|------------------------------------|
+| `DATABASE_URL`    | PostgreSQL connection string       |
+| `PORT`            | Server port (default: `3000`)      |
+| `CASINO_SECRET`   | HMAC secret for casino callbacks   |
+| `PROVIDER_SECRET` | HMAC secret for provider endpoints |
 
-# Run migrations inside the container
-docker compose exec api npx prisma migrate dev
-
-# Seed the database
-docker compose exec api npx tsx prisma/seed.ts
-```
-
-## API Endpoints
-
-### Casino APIs
-
-| Method | Endpoint                | Description                              | Auth           |
-|--------|------------------------|------------------------------------------|----------------|
-| POST   | `/casino/launchGame`    | Launch a game session                    | Client-initiated |
-| POST   | `/casino/simulateRound` | Full end-to-end round simulation         | Client-initiated |
-| POST   | `/casino/getBalance`    | Get player balance (provider callback)   | HMAC `x-casino-signature` |
-| POST   | `/casino/debit`         | Debit funds for a bet (provider callback)| HMAC `x-casino-signature` |
-| POST   | `/casino/credit`        | Credit funds for payout (provider callback)| HMAC `x-casino-signature` |
-| POST   | `/casino/rollback`      | Rollback a bet (provider callback)       | HMAC `x-casino-signature` |
-
-### Provider APIs
-
-| Method | Endpoint              | Description                              | Auth           |
-|--------|-----------------------|------------------------------------------|----------------|
-| POST   | `/provider/launch`    | Initialize provider-side session         | HMAC `x-provider-signature` |
-| POST   | `/provider/simulate`  | Run scripted demo round                  | HMAC `x-provider-signature` |
-
-## Running a Full Simulation
+## Run a Full Simulation
 
 With the server running:
 
@@ -117,7 +53,7 @@ With the server running:
 pnpm simulate
 ```
 
-Or manually with curl:
+Or with curl:
 
 ```bash
 curl -X POST http://localhost:3000/casino/simulateRound \
@@ -125,48 +61,131 @@ curl -X POST http://localhost:3000/casino/simulateRound \
   -d '{"userId": 1, "gameId": 1, "currency": "USD"}'
 ```
 
-This executes a complete round: launch → balance check → 2 bets → rollback of 1 bet → payout → final balance check.
+### Expected Simulation Output
 
-## Environment Variables
+Starting balance: `1,000,000` cents ($10,000.00)
 
-| Variable          | Description                        | Default                    |
-|-------------------|------------------------------------|----------------------------|
-| `DATABASE_URL`    | PostgreSQL connection string       | `postgresql://postgres:postgres@localhost:5432/casino_integration` |
-| `PORT`            | Server port                        | `3000`                     |
-| `CASINO_SECRET`   | HMAC secret for casino callbacks   | `casino-secret-key`        |
-| `PROVIDER_SECRET` | HMAC secret for provider endpoints | `provider-secret-key`      |
+| Step | Action | Amount | Balance After | Validates |
+|------|--------|--------|---------------|-----------|
+| 1 | Balance check | -- | 1,000,000 | Read-only query |
+| 2 | Bet 1 (debit) | -1,000 | 999,000 | Atomic debit |
+| 3 | Bet 2 (debit) | -1,000 | 998,000 | Atomic debit |
+| 4 | Rollback bet 2 | +1,000 | 999,000 | Reversal of bet 2 |
+| 5 | Payout (credit) | +2,000 | 1,001,000 | 2x bet 1 winnings |
+| 6 | Final balance check | -- | 1,001,000 | Confirms integrity |
+| 7 | Idempotency retry (bet 1) | 0 | 1,001,000 | Cached response, no double-charge |
+| 8 | Tombstone rollback | 0 | 1,001,000 | Marker for non-existent original |
+| 9 | Rejected rollback | -- | 1,001,000 | Denied: round has payout |
 
-## Key Design Decisions
+Final balance: `1,001,000` cents ($10,010.00) — net profit of $10.00.
 
-- **Idempotency**: All money-moving endpoints (`/casino/debit`, `/casino/credit`, `/casino/rollback`) use `externalTransactionId` as idempotency key. Duplicate requests return the cached first response.
-- **Atomic balance updates**: All wallet mutations (`/casino/debit`, `/casino/credit`, `/casino/rollback`) happen inside Prisma interactive transactions (`$transaction`). An interactive transaction wraps multiple database operations into a single atomic unit — if any step fails (e.g., insufficient funds, constraint violation), **all changes are automatically rolled back** and the database remains in its previous consistent state. This guarantees that the balance read, the balance update, and the transaction record insert either all succeed together or none of them are applied, preventing partial writes that could leave the wallet in an inconsistent state.
-- **Rollback rules**: Only debits (bets) can be rolled back. Tombstone markers are created for unknown original transactions.
-- **HMAC-SHA256 authentication**: Provider→Casino uses `x-casino-signature` + `CASINO_SECRET`. Casino→Provider uses `x-provider-signature` + `PROVIDER_SECRET`.
-- **Logical separation**: Casino and Provider domains are fully separated in code (`/casino/*`, `/provider/*`) and database (`casino_*`, `provider_*` tables).
+## API Endpoints
 
-## Production Improvements
+### Casino APIs
 
-The following improvements were intentionally omitted following the test guideline: *"Focus on correctness, clarity, and robustness rather than over-engineering."*
+| Endpoint | Description | Auth |
+|----------|-------------|------|
+| `POST /casino/launchGame` | Validates player/wallet, creates session, calls `/provider/launch` | None (client) |
+| `POST /casino/simulateRound` | Orchestrates launch + full provider simulation | None (client) |
+| `POST /casino/getBalance` | Returns authoritative player balance (read-only) | HMAC `x-casino-signature` |
+| `POST /casino/debit` | Deducts funds for a bet (atomic, idempotent) | HMAC `x-casino-signature` |
+| `POST /casino/credit` | Credits funds for a payout (atomic, idempotent) | HMAC `x-casino-signature` |
+| `POST /casino/rollback` | Reverses a previously accepted bet (atomic, idempotent) | HMAC `x-casino-signature` |
 
-### Pessimistic Locking for Wallet Operations
+### Provider APIs
 
-All wallet balance updates run inside Prisma interactive transactions (`$transaction`), which guarantee atomicity — if any step fails, all changes are rolled back. However, under high concurrency, two simultaneous requests could read the same balance before either writes, leading to a lost update (race condition).
+| Endpoint | Description | Auth |
+|----------|-------------|------|
+| `POST /provider/launch` | Creates provider-side session and player mapping | HMAC `x-provider-signature` |
+| `POST /provider/simulate` | Runs scripted demo round calling casino callbacks | HMAC `x-provider-signature` |
 
-In production, this would be solved with `SELECT ... FOR UPDATE` (pessimistic locking), which acquires an exclusive row-level lock on the wallet row before reading:
+## Security Model (HMAC-SHA256)
 
-```sql
--- Current (optimistic — sufficient for single-threaded access):
-SELECT * FROM casino_wallets WHERE id = $1;
+Each direction of communication uses its own dedicated secret and header:
 
--- Production (pessimistic — safe under concurrency):
-SELECT * FROM casino_wallets WHERE id = $1 FOR UPDATE;
+| Direction | Header | Secret |
+|-----------|--------|--------|
+| Provider -> Casino (`/casino/*`) | `x-casino-signature` | `CASINO_SECRET` |
+| Casino -> Provider (`/provider/*`) | `x-provider-signature` | `PROVIDER_SECRET` |
+
+The request body is serialized with `JSON.stringify()` and signed using HMAC-SHA256. Verification uses `crypto.timingSafeEqual()` for constant-time comparison, preventing timing attacks.
+
+## Idempotency
+
+All money-moving endpoints (`/casino/debit`, `/casino/credit`, `/casino/rollback`) enforce strict idempotency:
+
+- Each request carries a unique `transactionId` generated by the Provider.
+- Before processing, the Casino checks `casino_transactions.external_transaction_id` (UNIQUE constraint).
+- If found, the original cached response (`response_cache` JSONB column) is returned immediately — no balance mutation occurs.
+- If not found, the transaction is processed atomically and the response is cached.
+
+This guarantees that provider retries (due to timeouts or network errors) never cause double-charges or double-payouts. The simulation can be safely re-run since each invocation generates new UUIDs for all transaction IDs.
+
+## Rollback Rules
+
+- **Only bets (debits) can be rolled back.** Attempting to rollback a credit returns HTTP 400.
+- **No rollback after payout.** If the round already has a credit transaction, rollback is denied with HTTP 400.
+- **Tombstone rule:** If the original bet transaction cannot be found, a rollback marker is recorded with `amount=0` and the response includes `"tombstone": true`. Balance remains unchanged. This provides auditability and prevents inconsistent retry behavior.
+- **Idempotent:** Duplicate rollback requests (same `transactionId`) return the cached first response.
+
+## Full Round Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Casino
+    participant Provider
+
+    Client->>Casino: POST /casino/simulateRound
+    Casino->>Casino: Create game session
+    Casino->>Provider: POST /provider/launch (x-provider-signature)
+    Provider->>Provider: Create player mapping + session
+    Provider-->>Casino: { providerSessionId }
+    Casino->>Provider: POST /provider/simulate (x-provider-signature)
+
+    Note over Provider,Casino: Simulation begins
+
+    Provider->>Casino: POST /casino/getBalance (x-casino-signature)
+    Casino-->>Provider: { balance: 1000000 }
+
+    Provider->>Casino: POST /casino/debit [bet1] (x-casino-signature)
+    Casino->>Casino: Atomic: check balance, debit, record tx
+    Casino-->>Provider: { balance: 999000, status: ok }
+
+    Provider->>Casino: POST /casino/debit [bet2] (x-casino-signature)
+    Casino-->>Provider: { balance: 998000, status: ok }
+
+    Provider->>Casino: POST /casino/rollback [bet2] (x-casino-signature)
+    Casino->>Casino: Atomic: verify debit, restore balance, record tx
+    Casino-->>Provider: { balance: 999000, status: ok }
+
+    Provider->>Casino: POST /casino/credit [payout] (x-casino-signature)
+    Casino->>Casino: Atomic: credit balance, record tx
+    Casino-->>Provider: { balance: 1001000, status: ok }
+
+    Provider->>Casino: POST /casino/getBalance (x-casino-signature)
+    Casino-->>Provider: { balance: 1001000 }
+
+    Provider->>Casino: POST /casino/debit [bet1 retry] (x-casino-signature)
+    Casino->>Casino: Idempotent hit — return cached response
+    Casino-->>Provider: { balance: 999000, cachedResponse: true }
+
+    Provider->>Casino: POST /casino/rollback [tombstone] (x-casino-signature)
+    Casino->>Casino: Original not found — record marker
+    Casino-->>Provider: { balance: 1001000, tombstone: true }
+
+    Provider->>Casino: POST /casino/rollback [rejected] (x-casino-signature)
+    Casino-->>Provider: 400 { error: round already has payout }
+
+    Note over Provider,Casino: Simulation ends
+
+    Provider-->>Casino: { status: completed, steps: [...] }
+    Casino-->>Client: { simulationResult, finalBalance: 1001000 }
 ```
 
-The second concurrent request would wait until the first transaction completes, ensuring balance reads are always up-to-date. This applies to `/casino/debit`, `/casino/credit`, and `/casino/rollback`.
+## Design Decisions
 
-### Other Potential Improvements
-
-- **Request timeout on provider calls**: Add `AbortController` with timeout to prevent the casino from hanging if the provider is unresponsive.
-- **Rate limiting**: Protect callback endpoints from excessive retry storms.
-- **Structured logging**: Replace `console.info`/`console.error` with a production logger (e.g., pino/winston) with correlation IDs for request tracing.
-- **Input validation**: Add schema validation (e.g., Zod) at the controller layer to reject malformed requests early.
+- **Single codebase:** As specified by the test. Both domains remain logically isolated — Casino never writes to `provider_*` tables and vice versa. All cross-domain communication happens through HTTP.
+- **PostgreSQL:** Required by the test. BigInt columns store monetary values in cents to avoid floating-point precision issues.
+- **Atomic transactions:** All wallet mutations run inside Prisma interactive transactions (`$transaction`). Balance read + update + ledger insert succeed or fail as a unit, preventing partial writes.
+- **Idempotency is mandatory:** In gaming and fintech systems, network failures and retries are expected. Without idempotency, a retried debit could double-charge a player. The `external_transaction_id` UNIQUE constraint combined with response caching eliminates this risk entirely.

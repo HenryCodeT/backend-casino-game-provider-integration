@@ -264,6 +264,59 @@ export async function simulateRound(input: SimulateInput) {
   });
   steps.push({ step: "final_balance_check", data: finalBalanceRes.data });
 
+  // ── Step 7: Idempotency retry — resend bet1 with same transactionId
+  const idempotencyRetryRes = await callCasino(casino, "/debit", {
+    sessionToken: input.sessionToken,
+    userId: input.userId,
+    transactionId: bet1TxId,
+    roundId,
+    amount: bet1Amount,
+  });
+
+  // Verify actual balance didn't change after the retry
+  const postRetryBalanceRes = await callCasino(casino, "/getBalance", {
+    sessionToken: input.sessionToken,
+    userId: input.userId,
+  });
+
+  steps.push({
+    step: "idempotency_retry_bet1",
+    data: {
+      ...idempotencyRetryRes.data,
+      cachedResponse: true,
+      actualBalanceAfterRetry: postRetryBalanceRes.data.balance,
+      balanceUnchanged: postRetryBalanceRes.data.balance === finalBalanceRes.data.balance,
+    },
+  });
+
+  // ── Step 8: Tombstone — rollback a non-existent original transaction
+  const tombstoneTxId = randomUUID();
+  const tombstoneRes = await callCasino(casino, "/rollback", {
+    sessionToken: input.sessionToken,
+    userId: input.userId,
+    transactionId: tombstoneTxId,
+    roundId,
+    originalTransactionId: "non-existent-tx-id",
+  });
+  steps.push({
+    step: "tombstone_rollback",
+    data: { ...tombstoneRes.data, balanceUnchanged: tombstoneRes.data.balance === finalBalanceRes.data.balance },
+  });
+
+  // ── Step 9: Rollback rejected after payout — try to rollback bet1 (round already has credit)
+  const rejectedRollbackTxId = randomUUID();
+  const rejectedRollbackRes = await callCasino(casino, "/rollback", {
+    sessionToken: input.sessionToken,
+    userId: input.userId,
+    transactionId: rejectedRollbackTxId,
+    roundId,
+    originalTransactionId: bet1TxId,
+  });
+  steps.push({
+    step: "rollback_rejected_after_payout",
+    data: { rejected: !rejectedRollbackRes.ok, ...rejectedRollbackRes.data },
+  });
+
   // Update round totals
   const totalBet = BigInt(bet1Amount);
   const totalPayout = BigInt(payoutAmount);
