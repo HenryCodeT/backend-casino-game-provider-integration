@@ -58,7 +58,7 @@ Or with curl:
 ```bash
 curl -X POST http://localhost:3000/casino/simulateRound \
   -H "Content-Type: application/json" \
-  -d '{"userId": 1, "gameId": 1, "currency": "USD"}'
+  -d '{"userId": 1, "gameId": 1}'
 ```
 
 ### Expected Simulation Output
@@ -130,62 +130,292 @@ This guarantees that provider retries (due to timeouts or network errors) never 
 
 ## Full Round Flow
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Casino
-    participant Provider
+### Step 0: Client triggers simulation
 
-    Client->>Casino: POST /casino/simulateRound
-    Casino->>Casino: Create game session
-    Casino->>Provider: POST /provider/launch (x-provider-signature)
-    Provider->>Provider: Create player mapping + session
-    Provider-->>Casino: { providerSessionId }
-    Casino->>Provider: POST /provider/simulate (x-provider-signature)
+**`POST /casino/simulateRound`** (no auth — client-initiated)
 
-    Note over Provider,Casino: Simulation begins
-
-    Provider->>Casino: POST /casino/getBalance (x-casino-signature)
-    Casino-->>Provider: { balance: 1000000 }
-
-    Provider->>Casino: POST /casino/debit [bet1] (x-casino-signature)
-    Casino->>Casino: Atomic: check balance, debit, record tx
-    Casino-->>Provider: { balance: 999000, status: ok }
-
-    Provider->>Casino: POST /casino/debit [bet2] (x-casino-signature)
-    Casino-->>Provider: { balance: 998000, status: ok }
-
-    Provider->>Casino: POST /casino/rollback [bet2] (x-casino-signature)
-    Casino->>Casino: Atomic: verify debit, restore balance, record tx
-    Casino-->>Provider: { balance: 999000, status: ok }
-
-    Provider->>Casino: POST /casino/credit [payout] (x-casino-signature)
-    Casino->>Casino: Atomic: credit balance, record tx
-    Casino-->>Provider: { balance: 1001000, status: ok }
-
-    Provider->>Casino: POST /casino/getBalance (x-casino-signature)
-    Casino-->>Provider: { balance: 1001000 }
-
-    Provider->>Casino: POST /casino/debit [bet1 retry] (x-casino-signature)
-    Casino->>Casino: Idempotent hit — return cached response
-    Casino-->>Provider: { balance: 999000, cachedResponse: true }
-
-    Provider->>Casino: POST /casino/rollback [tombstone] (x-casino-signature)
-    Casino->>Casino: Original not found — record marker
-    Casino-->>Provider: { balance: 1001000, tombstone: true }
-
-    Provider->>Casino: POST /casino/rollback [rejected] (x-casino-signature)
-    Casino-->>Provider: 400 { error: round already has payout }
-
-    Note over Provider,Casino: Simulation ends
-
-    Provider-->>Casino: { status: completed, steps: [...] }
-    Casino-->>Client: { simulationResult, finalBalance: 1001000 }
+```json
+// Request
+{ "userId": 1, "gameId": 1 }
 ```
+
+Casino creates a game session and calls the Provider:
+
+### Step 0a: Casino calls Provider launch
+
+**`POST /provider/launch`** | Header: `x-provider-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "casinoSessionId": 1,
+  "userId": 1,
+  "gameId": "SLOTS_001",
+  "currency": "USD",
+  "casinoCode": "JAQPOT"
+}
+
+// Response 200
+{
+  "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+  "gameId": "SLOTS_001",
+  "currency": "USD",
+  "minBet": "1000",
+  "maxBet": "100000",
+  "playerId": 1
+}
+```
+
+Casino stores `providerSessionId` in the session, then calls Provider simulate:
+
+### Step 0b: Casino calls Provider simulate
+
+**`POST /provider/simulate`** | Header: `x-provider-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+  "userId": 1,
+  "gameId": "SLOTS_001",
+  "currency": "USD",
+  "casinoCode": "JAQPOT"
+}
+```
+
+Provider creates a game round and executes the following steps:
+
+---
+
+### Step 1: Balance check
+
+**`POST /casino/getBalance`** | Header: `x-casino-signature`
+
+```json
+// Request
+{ "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101", "userId": 1 }
+
+// Response 200
+{ "userId": 1, "balance": "1000000", "currency": "USD" }
+```
+
+Balance: **1,000,000** (no mutation)
+
+---
+
+### Step 2: Bet 1 (debit)
+
+**`POST /casino/debit`** | Header: `x-casino-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "amount": 1000
+}
+
+// Response 200
+{
+  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "balance": "999000",
+  "currency": "USD",
+  "status": "ok"
+}
+```
+
+Balance: 1,000,000 - 1,000 = **999,000**
+
+---
+
+### Step 3: Bet 2 (debit)
+
+**`POST /casino/debit`** | Header: `x-casino-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "amount": 1000
+}
+
+// Response 200
+{
+  "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+  "balance": "998000",
+  "currency": "USD",
+  "status": "ok"
+}
+```
+
+Balance: 999,000 - 1,000 = **998,000**
+
+---
+
+### Step 4: Rollback bet 2
+
+**`POST /casino/rollback`** | Header: `x-casino-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "originalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd"
+}
+
+// Response 200
+{
+  "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+  "balance": "999000",
+  "currency": "USD",
+  "status": "ok"
+}
+```
+
+Balance: 998,000 + 1,000 = **999,000** (bet 2 reversed)
+
+---
+
+### Step 5: Payout (credit)
+
+**`POST /casino/credit`** | Header: `x-casino-signature`
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "amount": 2000,
+  "relatedTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
+}
+
+// Response 200
+{
+  "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+  "balance": "1001000",
+  "currency": "USD",
+  "status": "ok"
+}
+```
+
+Balance: 999,000 + 2,000 = **1,001,000** (2x bet 1 winnings)
+
+---
+
+### Step 6: Final balance check
+
+**`POST /casino/getBalance`** | Header: `x-casino-signature`
+
+```json
+// Request
+{ "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101", "userId": 1 }
+
+// Response 200
+{ "userId": 1, "balance": "1001000", "currency": "USD" }
+```
+
+Balance confirmed: **1,001,000**
+
+---
+
+### Step 7: Idempotency test — retry bet 1
+
+**`POST /casino/debit`** | Header: `x-casino-signature`
+
+Same `transactionId` as Step 2. Casino detects the duplicate and returns the cached response without mutating the balance.
+
+```json
+// Request (identical to Step 2)
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "amount": 1000
+}
+
+// Response 200 (cached from Step 2)
+{
+  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "balance": "999000",
+  "currency": "USD",
+  "status": "ok"
+}
+```
+
+Actual balance after retry: **1,001,000** (unchanged — idempotency verified)
+
+---
+
+### Step 8: Tombstone rollback
+
+**`POST /casino/rollback`** | Header: `x-casino-signature`
+
+Rollback references a non-existent `originalTransactionId`. Casino records a tombstone marker with `amount=0` and returns success.
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "originalTransactionId": "non-existent-tx-id"
+}
+
+// Response 200
+{
+  "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
+  "balance": "1001000",
+  "currency": "USD",
+  "status": "ok",
+  "tombstone": true
+}
+```
+
+Balance: **1,001,000** (unchanged — tombstone recorded for auditability)
+
+---
+
+### Step 9: Rollback rejected after payout
+
+**`POST /casino/rollback`** | Header: `x-casino-signature`
+
+Attempts to rollback bet 1, but the round already has a credit (Step 5). Casino rejects with HTTP 400.
+
+```json
+// Request
+{
+  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "userId": 1,
+  "transactionId": "f8a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "originalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
+}
+
+// Response 400
+{ "error": "Cannot rollback: round already has a payout" }
+```
+
+Balance: **1,001,000** (unchanged — rollback denied)
+
+
 
 ## Design Decisions
 
-- **Single codebase:** As specified by the test. Both domains remain logically isolated — Casino never writes to `provider_*` tables and vice versa. All cross-domain communication happens through HTTP.
+- **Single codebase:** As specified by the test. Both domains remain logically isolated — Casino never writes to Provider tables and vice versa. All cross-domain communication happens through HTTP.
 - **PostgreSQL:** Required by the test. BigInt columns store monetary values in cents to avoid floating-point precision issues.
 - **Atomic transactions:** All wallet mutations run inside Prisma interactive transactions (`$transaction`). Balance read + update + ledger insert succeed or fail as a unit, preventing partial writes.
 - **Idempotency is mandatory:** In gaming and fintech systems, network failures and retries are expected. Without idempotency, a retried debit could double-charge a player. The `external_transaction_id` UNIQUE constraint combined with response caching eliminates this risk entirely.
