@@ -12,7 +12,7 @@ async function callCasino(
   const url = `${casino.casinoApiEndpoint}/casino${path}`;
   const signature = signBody(body, casino.casinoSecret);
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -21,8 +21,8 @@ async function callCasino(
     body: JSON.stringify(body),
   });
 
-  const data = await res.json();
-  return { ok: res.ok, status: res.status, data };
+  const data = await response.json();
+  return { ok: response.ok, status: response.status, data };
 }
 
 // ─── Launch ──────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ export async function simulateRound(input: SimulateInput) {
   const roundId = randomUUID();
   const steps: Array<{ step: string; data: unknown }> = [];
 
-  const round = await prisma.providerGameRound.create({
+  const gameRound = await prisma.providerGameRound.create({
     data: {
       roundId,
       sessionId: input.providerSessionId,
@@ -135,194 +135,192 @@ export async function simulateRound(input: SimulateInput) {
   });
 
   // ── Step 1: Balance check
-  const balanceRes = await callCasino(casino, "/getBalance", {
+  const balanceResponse = await callCasino(casino, "/getBalance", {
     sessionToken: input.sessionToken,
     userId: input.userId,
   });
-  steps.push({ step: "balance_check", data: balanceRes.data });
-
-  if (!balanceRes.ok) {
-    throw { status: 502, error: "Balance check failed", details: balanceRes.data };
+  if (!balanceResponse.ok) {
+    throw { status: 502, error: "Balance check failed", details: balanceResponse.data };
   }
+  steps.push({ step: "balance_check", data: balanceResponse.data });
 
   // ── Step 2: First bet (debit)
-  const bet1TxId = randomUUID();
-  const bet1Amount = Number(game.minBet);
+  const firstBetTransactionId = randomUUID();
+  const firstBetAmount = Number(game.minBet);
 
-  const bet1Response = await callCasino(casino, "/debit", {
+  const firstBetResponse = await callCasino(casino, "/debit", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: bet1TxId,
+    transactionId: firstBetTransactionId,
     roundId,
-    amount: bet1Amount,
+    amount: firstBetAmount,
   });
 
   await prisma.providerBet.create({
     data: {
-      transactionId: bet1TxId,
-      providerGameRoundId: round.id,
+      transactionId: firstBetTransactionId,
+      providerGameRoundId: gameRound.id,
       providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "debit",
-      amount: BigInt(bet1Amount),
-      casinoBalanceAfter: bet1Response.ok ? BigInt(bet1Response.data.balance) : null,
-      status: bet1Response.ok ? "accepted" : "failed",
-      responseCache: bet1Response.data,
+      amount: BigInt(firstBetAmount),
+      casinoBalanceAfter: firstBetResponse.ok ? BigInt(firstBetResponse.data.balance) : null,
+      status: firstBetResponse.ok ? "accepted" : "failed",
+      responseCache: firstBetResponse.data,
     },
   });
-  steps.push({ step: "bet_1_debit", data: bet1Response.data });
-
-  if (!bet1Response.ok) {
-    throw { status: 502, error: "First bet failed", details: bet1Response.data };
+  if (!firstBetResponse.ok) {
+    throw { status: 502, error: "First bet failed", details: firstBetResponse.data };
   }
+  steps.push({ step: "first_bet_debit", data: firstBetResponse.data });
 
   // ── Step 3: Second bet (debit)
-  const bet2TxId = randomUUID();
-  const bet2Amount = Number(game.minBet);
+  const secondBetTransactionId = randomUUID();
+  const secondBetAmount = Number(game.minBet);
 
-  const bet2Res = await callCasino(casino, "/debit", {
+  const secondBetResponse = await callCasino(casino, "/debit", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: bet2TxId,
+    transactionId: secondBetTransactionId,
     roundId,
-    amount: bet2Amount,
+    amount: secondBetAmount,
   });
 
   await prisma.providerBet.create({
     data: {
-      transactionId: bet2TxId,
-      providerGameRoundId: round.id,
+      transactionId: secondBetTransactionId,
+      providerGameRoundId: gameRound.id,
       providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "debit",
-      amount: BigInt(bet2Amount),
-      casinoBalanceAfter: bet2Res.ok ? BigInt(bet2Res.data.balance) : null,
-      status: bet2Res.ok ? "accepted" : "failed",
-      responseCache: bet2Res.data,
+      amount: BigInt(secondBetAmount),
+      casinoBalanceAfter: secondBetResponse.ok ? BigInt(secondBetResponse.data.balance) : null,
+      status: secondBetResponse.ok ? "accepted" : "failed",
+      responseCache: secondBetResponse.data,
     },
   });
-  steps.push({ step: "bet_2_debit", data: bet2Res.data });
+  steps.push({ step: "second_bet_debit", data: secondBetResponse.data });
 
   // ── Step 4: Rollback second bet
-  const rollbackTxId = randomUUID();
+  const rollbackTransactionId = randomUUID();
 
-  const rollbackRes = await callCasino(casino, "/rollback", {
+  const rollbackResponse = await callCasino(casino, "/rollback", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: rollbackTxId,
+    transactionId: rollbackTransactionId,
     roundId,
-    originalTransactionId: bet2TxId,
+    originalTransactionId: secondBetTransactionId,
   });
 
   await prisma.providerBet.create({
     data: {
-      transactionId: rollbackTxId,
-      providerGameRoundId: round.id,
+      transactionId: rollbackTransactionId,
+      providerGameRoundId: gameRound.id,
       providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "rollback",
-      amount: BigInt(bet2Amount),
-      casinoBalanceAfter: rollbackRes.ok ? BigInt(rollbackRes.data.balance) : null,
-      status: rollbackRes.ok ? "accepted" : "failed",
-      responseCache: rollbackRes.data,
+      amount: BigInt(secondBetAmount),
+      casinoBalanceAfter: rollbackResponse.ok ? BigInt(rollbackResponse.data.balance) : null,
+      status: rollbackResponse.ok ? "accepted" : "failed",
+      responseCache: rollbackResponse.data,
     },
   });
-  steps.push({ step: "rollback_bet_2", data: rollbackRes.data });
+  steps.push({ step: "second_bet_rollback", data: rollbackResponse.data });
 
   // ── Step 5: Payout (credit)
-  const payoutTxId = randomUUID();
-  const payoutAmount = bet1Amount * 2;
+  const payoutTransactionId = randomUUID();
+  const payoutAmount = firstBetAmount * 2;
 
-  const payoutRes = await callCasino(casino, "/credit", {
+  const payoutResponse = await callCasino(casino, "/credit", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: payoutTxId,
+    transactionId: payoutTransactionId,
     roundId,
     amount: payoutAmount,
-    relatedTransactionId: bet1TxId,
+    relatedTransactionId: firstBetTransactionId,
   });
 
   await prisma.providerBet.create({
     data: {
-      transactionId: payoutTxId,
-      providerGameRoundId: round.id,
+      transactionId: payoutTransactionId,
+      providerGameRoundId: gameRound.id,
       providerCasinoId: casino.id,
       casinoUserId: Number(input.userId),
       betType: "credit",
       amount: BigInt(payoutAmount),
-      casinoBalanceAfter: payoutRes.ok ? BigInt(payoutRes.data.balance) : null,
-      status: payoutRes.ok ? "accepted" : "failed",
-      responseCache: payoutRes.data,
+      casinoBalanceAfter: payoutResponse.ok ? BigInt(payoutResponse.data.balance) : null,
+      status: payoutResponse.ok ? "accepted" : "failed",
+      responseCache: payoutResponse.data,
     },
   });
-  steps.push({ step: "payout_credit", data: payoutRes.data });
+  steps.push({ step: "payout_credit", data: payoutResponse.data });
 
   // ── Step 6: Final balance check
-  const finalBalanceRes = await callCasino(casino, "/getBalance", {
+  const finalBalanceResponse = await callCasino(casino, "/getBalance", {
     sessionToken: input.sessionToken,
     userId: input.userId,
   });
-  steps.push({ step: "final_balance_check", data: finalBalanceRes.data });
+  steps.push({ step: "final_balance_check", data: finalBalanceResponse.data });
 
-  // ── Step 7: Idempotency retry — resend bet1 with same transactionId
-  const idempotencyRetryRes = await callCasino(casino, "/debit", {
+  // ── Step 7: Idempotency retry — resend first bet with same transactionId
+  const idempotencyRetryResponse = await callCasino(casino, "/debit", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: bet1TxId,
+    transactionId: firstBetTransactionId,
     roundId,
-    amount: bet1Amount,
+    amount: firstBetAmount,
   });
 
   // Verify actual balance didn't change after the retry
-  const postRetryBalanceRes = await callCasino(casino, "/getBalance", {
+  const postRetryBalanceResponse = await callCasino(casino, "/getBalance", {
     sessionToken: input.sessionToken,
     userId: input.userId,
   });
 
   steps.push({
-    step: "idempotency_retry_bet1",
+    step: "idempotency_retry_first_bet",
     data: {
-      ...idempotencyRetryRes.data,
+      ...idempotencyRetryResponse.data,
       cachedResponse: true,
-      actualBalanceAfterRetry: postRetryBalanceRes.data.balance,
-      balanceUnchanged: postRetryBalanceRes.data.balance === finalBalanceRes.data.balance,
+      actualBalanceAfterRetry: postRetryBalanceResponse.data.balance,
+      balanceUnchanged: postRetryBalanceResponse.data.balance === finalBalanceResponse.data.balance,
     },
   });
 
   // ── Step 8: Tombstone — rollback a non-existent original transaction
-  const tombstoneTxId = randomUUID();
-  const tombstoneRes = await callCasino(casino, "/rollback", {
+  const tombstoneTransactionId = randomUUID();
+  const tombstoneResponse = await callCasino(casino, "/rollback", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: tombstoneTxId,
+    transactionId: tombstoneTransactionId,
     roundId,
-    originalTransactionId: "non-existent-tx-id",
+    originalTransactionId: "non-existent-transaction-id",
   });
   steps.push({
     step: "tombstone_rollback",
-    data: { ...tombstoneRes.data, balanceUnchanged: tombstoneRes.data.balance === finalBalanceRes.data.balance },
+    data: { ...tombstoneResponse.data, balanceUnchanged: tombstoneResponse.data.balance === finalBalanceResponse.data.balance },
   });
 
-  // ── Step 9: Rollback rejected after payout — try to rollback bet1 (round already has credit)
-  const rejectedRollbackTxId = randomUUID();
-  const rejectedRollbackRes = await callCasino(casino, "/rollback", {
+  // ── Step 9: Rollback rejected after payout — try to rollback first bet (round already has credit)
+  const rejectedRollbackTransactionId = randomUUID();
+  const rejectedRollbackResponse = await callCasino(casino, "/rollback", {
     sessionToken: input.sessionToken,
     userId: input.userId,
-    transactionId: rejectedRollbackTxId,
+    transactionId: rejectedRollbackTransactionId,
     roundId,
-    originalTransactionId: bet1TxId,
+    originalTransactionId: firstBetTransactionId,
   });
   steps.push({
     step: "rollback_rejected_after_payout",
-    data: { rejected: !rejectedRollbackRes.ok, ...rejectedRollbackRes.data },
+    data: { rejected: !rejectedRollbackResponse.ok, ...rejectedRollbackResponse.data },
   });
 
   // Update round totals
-  const totalBet = BigInt(bet1Amount);
+  const totalBet = BigInt(firstBetAmount);
   const totalPayout = BigInt(payoutAmount);
 
   await prisma.providerGameRound.update({
-    where: { id: round.id },
+    where: { id: gameRound.id },
     data: {
       status: "closed",
       totalBetAmount: totalBet,

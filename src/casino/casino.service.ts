@@ -18,7 +18,7 @@ export async function launchGame(input: LaunchGameInput) {
   if (!user) throw { status: 404, error: "User not found" };
 
   const currency = input.currency || user.casinoWallets[0]?.currencyCode;
-  const wallet = user.casinoWallets.find(w => w.currencyCode === currency);
+  const wallet = user.casinoWallets.find(currentWallet => currentWallet.currencyCode === currency);
   if (!wallet) throw { status: 404, error: "Wallet not found for the requested currency" };
 
   const game = await prisma.casinoGame.findUnique({
@@ -56,7 +56,7 @@ export async function launchGame(input: LaunchGameInput) {
   const providerUrl = `${game.casinoGameProvider.apiEndpoint}/provider/launch`;
   const signature = signBody(launchPayload, providerSecret);
 
-  const providerRes = await fetch(providerUrl, {
+  const providerResponse = await fetch(providerUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -65,9 +65,9 @@ export async function launchGame(input: LaunchGameInput) {
     body: JSON.stringify(launchPayload),
   });
 
-  if (!providerRes.ok) {
-    const errBody = await providerRes.text();
-    console.error("Provider launch failed", { status: providerRes.status, body: errBody });
+  if (!providerResponse.ok) {
+    const errorBody = await providerResponse.text();
+    console.error("Provider launch failed", { status: providerResponse.status, body: errorBody });
     await prisma.casinoGameSession.update({
       where: { id: session.id },
       data: { isActive: false },
@@ -75,7 +75,7 @@ export async function launchGame(input: LaunchGameInput) {
     throw { status: 502, error: "Provider launch failed" };
   }
 
-  const providerData = (await providerRes.json()) as {
+  const providerData = (await providerResponse.json()) as {
     providerSessionId: string;
   };
 
@@ -132,12 +132,12 @@ export async function debit(input: DebitInput) {
   const debitAmount = BigInt(input.amount);
 
   // Idempotency check
-  const existing = await prisma.casinoTransaction.findUnique({
+  const existingTransaction = await prisma.casinoTransaction.findUnique({
     where: { externalTransactionId: input.transactionId },
   });
-  if (existing) {
+  if (existingTransaction) {
     console.info("Debit idempotent hit", { transactionId: input.transactionId });
-    return existing.responseCache;
+    return existingTransaction.responseCache;
   }
 
   const session = await prisma.casinoGameSession.findUnique({
@@ -215,12 +215,12 @@ export async function credit(input: CreditInput) {
   const creditAmount = BigInt(input.amount);
 
   // Idempotency check
-  const existing = await prisma.casinoTransaction.findUnique({
+  const existingTransaction = await prisma.casinoTransaction.findUnique({
     where: { externalTransactionId: input.transactionId },
   });
-  if (existing) {
+  if (existingTransaction) {
     console.info("Credit idempotent hit", { transactionId: input.transactionId });
-    return existing.responseCache;
+    return existingTransaction.responseCache;
   }
 
   const session = await prisma.casinoGameSession.findUnique({
@@ -284,12 +284,12 @@ interface RollbackInput {
 
 export async function rollback(input: RollbackInput) {
   // Idempotency check
-  const existing = await prisma.casinoTransaction.findUnique({
+  const existingTransaction = await prisma.casinoTransaction.findUnique({
     where: { externalTransactionId: input.transactionId },
   });
-  if (existing) {
+  if (existingTransaction) {
     console.info("Rollback idempotent hit", { transactionId: input.transactionId });
-    return existing.responseCache;
+    return existingTransaction.responseCache;
   }
 
   const session = await prisma.casinoGameSession.findUnique({
@@ -301,12 +301,12 @@ export async function rollback(input: RollbackInput) {
   }
 
   // Find the original bet transaction
-  const originalTx = await prisma.casinoTransaction.findUnique({
+  const originalTransaction = await prisma.casinoTransaction.findUnique({
     where: { externalTransactionId: input.originalTransactionId },
   });
 
   // Tombstone rule: if original not found, record marker and return success
-  if (!originalTx) {
+  if (!originalTransaction) {
     const tombstoneResponse = {
       transactionId: input.transactionId,
       balance: session.casinoWallet.playableBalance.toString(),
@@ -337,18 +337,18 @@ export async function rollback(input: RollbackInput) {
   }
 
   // Only bets can be rolled back
-  if (originalTx.transactionType !== "debit") {
+  if (originalTransaction.transactionType !== "debit") {
     throw { status: 400, error: "Only bets (debits) can be rolled back" };
   }
 
   // Check if round already has a payout
-  const hasPayout = await prisma.casinoTransaction.findFirst({
+  const existingPayout = await prisma.casinoTransaction.findFirst({
     where: {
       externalRoundId: input.roundId,
       transactionType: "credit",
     },
   });
-  if (hasPayout) {
+  if (existingPayout) {
     throw { status: 400, error: "Cannot rollback: round already has a payout" };
   }
 
@@ -358,7 +358,7 @@ export async function rollback(input: RollbackInput) {
     });
     if (!wallet) throw new Error("Wallet not found");
 
-    const newBalance = wallet.playableBalance + originalTx.amount;
+    const newBalance = wallet.playableBalance + originalTransaction.amount;
 
     await tx.casinoWallet.update({
       where: { id: wallet.id },
@@ -377,7 +377,7 @@ export async function rollback(input: RollbackInput) {
         casinoWalletId: wallet.id,
         casinoGameSessionId: session.id,
         transactionType: "rollback",
-        amount: originalTx.amount,
+        amount: originalTransaction.amount,
         externalTransactionId: input.transactionId,
         externalRoundId: input.roundId,
         relatedExternalTransactionId: input.originalTransactionId,
@@ -440,8 +440,8 @@ export async function simulateRound(input: SimulateRoundInput) {
   });
 
   if (!simulateResponse.ok) {
-    const errBody = await simulateResponse.text();
-    console.error("Provider simulate failed", { status: simulateResponse.status, body: errBody });
+    const errorBody = await simulateResponse.text();
+    console.error("Provider simulate failed", { status: simulateResponse.status, body: errorBody });
     throw { status: 502, error: "Provider simulate failed" };
   }
 

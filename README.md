@@ -6,7 +6,7 @@ The Casino is the **sole source of truth** for wallet balances. The Provider nev
 
 ## Tech Stack
 
-- **Runtime:** Node.js v18+
+- **Runtime:** Node.js v20.12+ (required by Prisma 7)
 - **Language:** TypeScript
 - **Framework:** Express.js
 - **Database:** PostgreSQL
@@ -181,7 +181,7 @@ Casino creates a game session and calls the Provider:
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "casinoSessionId": 1,
   "userId": 1,
   "gameId": "SLOTS_001",
@@ -191,7 +191,7 @@ Casino creates a game session and calls the Provider:
 
 // Response 200
 {
-  "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+  "providerSessionId": "4f9ac4c2-2001-440c-b025-8ca60db0e6b6",
   "gameId": "SLOTS_001",
   "currency": "USD",
   "minBet": "1000",
@@ -200,7 +200,7 @@ Casino creates a game session and calls the Provider:
 }
 ```
 
-Casino stores `providerSessionId` in the session, then calls Provider simulate:
+Casino stores `providerSessionId` in `casino_game_sessions.providerSessionId`, then calls Provider simulate:
 
 ### Step 0b: Casino calls Provider simulate
 
@@ -209,8 +209,8 @@ Casino stores `providerSessionId` in the session, then calls Provider simulate:
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
-  "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
+  "providerSessionId": "4f9ac4c2-2001-440c-b025-8ca60db0e6b6",
   "userId": 1,
   "gameId": "SLOTS_001",
   "currency": "USD",
@@ -218,7 +218,7 @@ Casino stores `providerSessionId` in the session, then calls Provider simulate:
 }
 ```
 
-Provider creates a game round and executes the following steps:
+Provider creates a game round (storing `providerSessionId` as `session_id` — see [Cross-Domain Field Mappings](#cross-domain-field-mappings)) and executes the following steps:
 
 ---
 
@@ -228,7 +228,7 @@ Provider creates a game round and executes the following steps:
 
 ```json
 // Request
-{ "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101", "userId": 1 }
+{ "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79", "userId": 1 }
 
 // Response 200
 { "userId": 1, "balance": "1000000", "currency": "USD" }
@@ -245,16 +245,16 @@ Balance: **1,000,000** (no mutation)
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
   "amount": 1000
 }
 
 // Response 200
 {
-  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
   "balance": "999000",
   "currency": "USD",
   "status": "ok"
@@ -272,16 +272,16 @@ Balance: 1,000,000 - 1,000 = **999,000**
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "transactionId": "79c31332-1eb5-48eb-b659-246c2c45f581",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
   "amount": 1000
 }
 
 // Response 200
 {
-  "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+  "transactionId": "79c31332-1eb5-48eb-b659-246c2c45f581",
   "balance": "998000",
   "currency": "USD",
   "status": "ok"
@@ -299,16 +299,16 @@ Balance: 999,000 - 1,000 = **998,000**
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-  "originalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd"
+  "transactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+  "originalTransactionId": "79c31332-1eb5-48eb-b659-246c2c45f581"
 }
 
 // Response 200
 {
-  "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+  "transactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71",
   "balance": "999000",
   "currency": "USD",
   "status": "ok"
@@ -326,17 +326,17 @@ Balance: 998,000 + 1,000 = **999,000** (bet 2 reversed)
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "transactionId": "2b24a995-afec-47e5-88ef-819c922a7af9",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
   "amount": 2000,
-  "relatedTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
+  "relatedTransactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd"
 }
 
 // Response 200
 {
-  "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+  "transactionId": "2b24a995-afec-47e5-88ef-819c922a7af9",
   "balance": "1001000",
   "currency": "USD",
   "status": "ok"
@@ -353,7 +353,7 @@ Balance: 999,000 + 2,000 = **1,001,000** (2x bet 1 winnings)
 
 ```json
 // Request
-{ "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101", "userId": 1 }
+{ "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79", "userId": 1 }
 
 // Response 200
 { "userId": 1, "balance": "1001000", "currency": "USD" }
@@ -372,16 +372,16 @@ Same `transactionId` as Step 2. Casino detects the duplicate and returns the cac
 ```json
 // Request (identical to Step 2)
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+  "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
   "amount": 1000
 }
 
 // Response 200 (cached from Step 2)
 {
-  "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+  "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
   "balance": "999000",
   "currency": "USD",
   "status": "ok"
@@ -401,16 +401,16 @@ Rollback references a non-existent `originalTransactionId`. Casino records a tom
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-  "originalTransactionId": "non-existent-tx-id"
+  "transactionId": "30d50745-cc21-415d-9b46-2c2dd64f3784",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+  "originalTransactionId": "non-existent-transaction-id"
 }
 
 // Response 200
 {
-  "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
+  "transactionId": "30d50745-cc21-415d-9b46-2c2dd64f3784",
   "balance": "1001000",
   "currency": "USD",
   "status": "ok",
@@ -431,11 +431,11 @@ Attempts to rollback bet 1, but the round already has a credit (Step 5). Casino 
 ```json
 // Request
 {
-  "sessionToken": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+  "sessionToken": "44269c7c-76c5-4a98-b261-02ab16b97b79",
   "userId": 1,
-  "transactionId": "f8a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
-  "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-  "originalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
+  "transactionId": "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a",
+  "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+  "originalTransactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd"
 }
 
 // Response 400
@@ -456,12 +456,14 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
     {
       "id": 1,
       "username": "player1",
-      "email": "player1@example.com"
+      "email": "player1@example.com",
+      "createdAt": "2026-02-11T22:54:17.571Z"
     },
     {
       "id": 2,
       "username": "player2",
-      "email": "player2@example.com"
+      "email": "player2@example.com",
+      "createdAt": "2026-02-11T22:54:17.576Z"
     }
   ],
   "casino_wallets": [
@@ -470,14 +472,16 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoUserId": 1,
       "currencyCode": "USD",
       "playableBalance": "1001000",
-      "redeemableBalance": "500000"
+      "redeemableBalance": "500000",
+      "updatedAt": "2026-02-11T23:22:36.362Z"
     },
     {
       "id": 2,
       "casinoUserId": 2,
       "currencyCode": "USD",
       "playableBalance": "500000",
-      "redeemableBalance": "250000"
+      "redeemableBalance": "250000",
+      "updatedAt": "2026-02-11T22:54:17.581Z"
     }
   ],
   "casino_game_providers": [
@@ -487,7 +491,8 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "name": "Jaqpot Games",
       "apiEndpoint": "http://localhost:3000",
       "secretKey": "provider_secret_key_change_in_production",
-      "isDisabled": false
+      "isDisabled": false,
+      "createdAt": "2026-02-11T22:54:17.583Z"
     }
   ],
   "casino_games": [
@@ -497,7 +502,8 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "providerGameId": "SLOTS_001",
       "isActive": true,
       "minBet": "1000",
-      "maxBet": "100000"
+      "maxBet": "100000",
+      "createdAt": "2026-02-11T22:54:17.585Z"
     },
     {
       "id": 2,
@@ -505,18 +511,20 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "providerGameId": "ROULETTE_001",
       "isActive": true,
       "minBet": "1000",
-      "maxBet": "500000"
+      "maxBet": "500000",
+      "createdAt": "2026-02-11T22:54:17.586Z"
     }
   ],
   "casino_game_sessions": [
     {
       "id": 1,
-      "token": "7f325788-c990-432c-b7b0-7dcbdd4e5101",
+      "token": "44269c7c-76c5-4a98-b261-02ab16b97b79",
       "casinoUserId": 1,
       "casinoWalletId": 1,
       "casinoGameId": 1,
-      "providerSessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
-      "isActive": true
+      "providerSessionId": "4f9ac4c2-2001-440c-b025-8ca60db0e6b6",
+      "isActive": true,
+      "createdAt": "2026-02-11T23:21:40.199Z"
     }
   ],
   "casino_transactions": [
@@ -526,16 +534,17 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoGameSessionId": 1,
       "transactionType": "debit",
       "amount": "1000",
-      "externalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
-      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "externalTransactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
+      "externalRoundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
       "relatedExternalTransactionId": null,
       "balanceAfter": "999000",
       "responseCache": {
         "status": "ok",
         "balance": "999000",
         "currency": "USD",
-        "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af"
-      }
+        "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd"
+      },
+      "createdAt": "2026-02-11T23:21:54.463Z"
     },
     {
       "id": 2,
@@ -543,16 +552,17 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoGameSessionId": 1,
       "transactionType": "debit",
       "amount": "1000",
-      "externalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
-      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
+      "externalTransactionId": "79c31332-1eb5-48eb-b659-246c2c45f581",
+      "externalRoundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
       "relatedExternalTransactionId": null,
       "balanceAfter": "998000",
       "responseCache": {
         "status": "ok",
         "balance": "998000",
         "currency": "USD",
-        "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd"
-      }
+        "transactionId": "79c31332-1eb5-48eb-b659-246c2c45f581"
+      },
+      "createdAt": "2026-02-11T23:22:22.146Z"
     },
     {
       "id": 3,
@@ -560,16 +570,17 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoGameSessionId": 1,
       "transactionType": "rollback",
       "amount": "1000",
-      "externalTransactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
-      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-      "relatedExternalTransactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+      "externalTransactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71",
+      "externalRoundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+      "relatedExternalTransactionId": "79c31332-1eb5-48eb-b659-246c2c45f581",
       "balanceAfter": "999000",
       "responseCache": {
         "status": "ok",
         "balance": "999000",
         "currency": "USD",
-        "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795"
-      }
+        "transactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71"
+      },
+      "createdAt": "2026-02-11T23:22:33.299Z"
     },
     {
       "id": 4,
@@ -577,16 +588,17 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoGameSessionId": 1,
       "transactionType": "credit",
       "amount": "2000",
-      "externalTransactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
-      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-      "relatedExternalTransactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+      "externalTransactionId": "2b24a995-afec-47e5-88ef-819c922a7af9",
+      "externalRoundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+      "relatedExternalTransactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
       "balanceAfter": "1001000",
       "responseCache": {
         "status": "ok",
         "balance": "1001000",
         "currency": "USD",
-        "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4"
-      }
+        "transactionId": "2b24a995-afec-47e5-88ef-819c922a7af9"
+      },
+      "createdAt": "2026-02-11T23:22:36.364Z"
     },
     {
       "id": 5,
@@ -594,17 +606,18 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "casinoGameSessionId": 1,
       "transactionType": "rollback",
       "amount": "0",
-      "externalTransactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e",
-      "externalRoundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-      "relatedExternalTransactionId": "non-existent-tx-id",
+      "externalTransactionId": "30d50745-cc21-415d-9b46-2c2dd64f3784",
+      "externalRoundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+      "relatedExternalTransactionId": "non-existent-transaction-id",
       "balanceAfter": "1001000",
       "responseCache": {
         "status": "ok",
         "balance": "1001000",
         "currency": "USD",
         "tombstone": true,
-        "transactionId": "0e2f778b-1e52-4872-a97c-4c58f759e12e"
-      }
+        "transactionId": "30d50745-cc21-415d-9b46-2c2dd64f3784"
+      },
+      "createdAt": "2026-02-11T23:22:42.555Z"
     }
   ],
   "provider_games": [
@@ -613,14 +626,16 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "gameId": "SLOTS_001",
       "isActive": true,
       "minBet": "1000",
-      "maxBet": "100000"
+      "maxBet": "100000",
+      "createdAt": "2026-02-11T22:54:17.588Z"
     },
     {
       "id": 2,
       "gameId": "ROULETTE_001",
       "isActive": true,
       "minBet": "1000",
-      "maxBet": "500000"
+      "maxBet": "500000",
+      "createdAt": "2026-02-11T22:54:17.589Z"
     }
   ],
   "provider_casinos": [
@@ -630,7 +645,8 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "name": "Jaqpot Casino",
       "casinoApiEndpoint": "http://localhost:3000",
       "casinoSecret": "casino_secret_key_change_in_production",
-      "isActive": true
+      "isActive": true,
+      "createdAt": "2026-02-11T22:54:17.591Z"
     }
   ],
   "provider_casino_users": [
@@ -638,14 +654,15 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "id": 1,
       "providerCasinoId": 1,
       "casinoUserId": 1,
-      "playerKey": "JAQPOT:1"
+      "playerKey": "JAQPOT:1",
+      "createdAt": "2026-02-11T23:18:55.394Z"
     }
   ],
   "provider_game_rounds": [
     {
       "id": 1,
-      "roundId": "971faf2a-1b1a-45da-82dd-fc1e202134e3",
-      "sessionId": "788b3ad9-daf4-40ad-84df-fafcaa277285",
+      "roundId": "67376984-1ce3-441a-ac4e-ab87bbfd8592",
+      "sessionId": "4f9ac4c2-2001-440c-b025-8ca60db0e6b6",
       "providerCasinoId": 1,
       "providerCasinoUserId": 1,
       "providerGameId": 1,
@@ -653,57 +670,101 @@ Run `pnpm db:dump` to verify. Below is the expected state after seeding + one si
       "currency": "USD",
       "status": "closed",
       "totalBetAmount": "1000",
-      "totalPayoutAmount": "2000"
+      "totalPayoutAmount": "2000",
+      "createdAt": "2026-02-11T23:21:44.404Z"
     }
   ],
   "provider_bets": [
     {
       "id": 1,
-      "transactionId": "a9429bb3-9f71-4497-9fa4-f5f7592a46af",
+      "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd",
       "providerGameRoundId": 1,
       "providerCasinoId": 1,
       "casinoUserId": 1,
       "betType": "debit",
       "amount": "1000",
       "casinoBalanceAfter": "999000",
-      "status": "accepted"
+      "status": "accepted",
+      "responseCache": {
+        "status": "ok",
+        "balance": "999000",
+        "currency": "USD",
+        "transactionId": "ef472e6b-042a-42d0-bb5f-17f4f75dc9cd"
+      },
+      "createdAt": "2026-02-11T23:22:01.657Z"
     },
     {
       "id": 2,
-      "transactionId": "bfcb7fbd-9593-4baa-9d4b-713f7cbf98fd",
+      "transactionId": "79c31332-1eb5-48eb-b659-246c2c45f581",
       "providerGameRoundId": 1,
       "providerCasinoId": 1,
       "casinoUserId": 1,
       "betType": "debit",
       "amount": "1000",
       "casinoBalanceAfter": "998000",
-      "status": "accepted"
+      "status": "accepted",
+      "responseCache": {
+        "status": "ok",
+        "balance": "998000",
+        "currency": "USD",
+        "transactionId": "79c31332-1eb5-48eb-b659-246c2c45f581"
+      },
+      "createdAt": "2026-02-11T23:22:30.786Z"
     },
     {
       "id": 3,
-      "transactionId": "06390e80-c6d9-46ea-a4f2-b09c6afbe795",
+      "transactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71",
       "providerGameRoundId": 1,
       "providerCasinoId": 1,
       "casinoUserId": 1,
       "betType": "rollback",
       "amount": "1000",
       "casinoBalanceAfter": "999000",
-      "status": "accepted"
+      "status": "accepted",
+      "responseCache": {
+        "status": "ok",
+        "balance": "999000",
+        "currency": "USD",
+        "transactionId": "ca23b91b-b02d-4cac-9c6b-70b2cfd00a71"
+      },
+      "createdAt": "2026-02-11T23:22:34.312Z"
     },
     {
       "id": 4,
-      "transactionId": "ae401783-763b-4ce0-8089-7a6c7b62f0a4",
+      "transactionId": "2b24a995-afec-47e5-88ef-819c922a7af9",
       "providerGameRoundId": 1,
       "providerCasinoId": 1,
       "casinoUserId": 1,
       "betType": "credit",
       "amount": "2000",
       "casinoBalanceAfter": "1001000",
-      "status": "accepted"
+      "status": "accepted",
+      "responseCache": {
+        "status": "ok",
+        "balance": "1001000",
+        "currency": "USD",
+        "transactionId": "2b24a995-afec-47e5-88ef-819c922a7af9"
+      },
+      "createdAt": "2026-02-11T23:22:37.183Z"
     }
   ]
 }
 ```
+
+## Cross-Domain Field Mappings
+
+Casino and Provider are logically isolated — they never read or write each other's tables. However, both sides must agree on shared identifiers to correlate sessions, rounds, transactions, users, and games across the boundary. These identifiers are exchanged exclusively through HTTP requests and stored independently on each side.
+
+| Shared Identifier | Generated By | Direction | Why It Crosses the Boundary |
+|----|----|----|----|
+| Session ID | Provider (during `/provider/launch`) | Casino → Provider (via `/provider/simulate`) | Casino needs it to link its session to the provider's round. Provider uses it as `provider_game_rounds.session_id` to group bets under a session. |
+| Round ID | Provider (during `/provider/simulate`) | Provider → Casino (via `/casino/debit`, `/credit`, `/rollback`) | Casino stores it as `casino_transactions.external_round_id` to group transactions per round and enforce rollback rules (e.g., no rollback after payout within the same round). |
+| Transaction ID | Provider (per bet/payout/rollback) | Provider → Casino (via `/casino/debit`, `/credit`, `/rollback`) | Casino stores it as `casino_transactions.external_transaction_id` (UNIQUE) to guarantee idempotency — duplicate requests return the cached response without mutating the balance. |
+| User ID | Casino (during registration) | Casino → Provider (via `/provider/launch`) | Provider stores it as `casino_user_id` across multiple tables to correlate its internal records back to the casino player without direct DB access. |
+| Game ID | Seeded on both sides | Casino → Provider (via `/provider/launch`) | Maps `casino_games.provider_game_id` to `provider_games.game_id` so the provider knows which game to load for the session. |
+| Casino Code | Seeded on both sides | Casino → Provider (via `/provider/launch`) | Maps `casino_game_providers.code` to `provider_casinos.casino_code` so the provider identifies which casino is calling and retrieves the correct callback URL and secret. |
+
+Each side names these fields from its own perspective: what the Casino calls `external_transaction_id` (because it originates outside), the Provider calls `transaction_id` (because it generated it). Neither side holds a foreign key to the other's tables — the link exists only through matching values.
 
 ## Design Decisions
 

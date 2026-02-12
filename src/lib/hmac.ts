@@ -6,17 +6,17 @@ export function signBody(body: unknown, secret: string): string {
 }
 
 export function verifySignature(
-  providedSig: string | undefined,
+  providedSignature: string | undefined,
   body: unknown,
   secret: string
 ): boolean {
-  if (!providedSig) return false;
-  const expectedSig = signBody(body, secret);
+  if (!providedSignature) return false;
+  const expectedSignature = signBody(body, secret);
   try {
-    const a = Buffer.from(providedSig, "hex");
-    const b = Buffer.from(expectedSig, "hex");
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
+    const providedBuffer = Buffer.from(providedSignature, "hex");
+    const expectedBuffer = Buffer.from(expectedSignature, "hex");
+    if (providedBuffer.length !== expectedBuffer.length) return false;
+    return crypto.timingSafeEqual(providedBuffer, expectedBuffer);
   } catch {
     return false;
   }
